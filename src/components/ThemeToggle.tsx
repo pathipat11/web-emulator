@@ -3,45 +3,45 @@
 
 import { useEffect, useState } from "react";
 
-type Theme = "light" | "dark";
+type ThemeMode = "light" | "dark";
 
-function applyTheme(t: Theme) {
-    const root = document.documentElement;
-    if (t === "dark") root.classList.add("dark");
-    else root.classList.remove("dark");
+function getInitialTheme(): ThemeMode {
+    if (typeof window === "undefined") return "dark";
+    const saved = window.localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") return saved;
+    return "dark";
 }
 
 export default function ThemeToggle() {
-    const [theme, setTheme] = useState<Theme>("light");
+    const [mounted, setMounted] = useState(false);
+    const [theme, setTheme] = useState<ThemeMode>("dark");
 
     useEffect(() => {
-        const saved = (localStorage.getItem("theme") as Theme | null) ?? null;
-
-        // default: follow system
-        const systemDark = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ?? false;
-        const initial: Theme = saved ?? (systemDark ? "dark" : "light");
-
-        setTheme(initial);
-        applyTheme(initial);
+        const t = getInitialTheme();
+        setTheme(t);
+        document.documentElement.dataset.theme = t;
+        setMounted(true);
     }, []);
 
     function toggle() {
-        const next: Theme = theme === "dark" ? "light" : "dark";
+        const next: ThemeMode = theme === "dark" ? "light" : "dark";
         setTheme(next);
-        applyTheme(next);
-        localStorage.setItem("theme", next);
+        document.documentElement.dataset.theme = next;
+        window.localStorage.setItem("theme", next);
+    }
+
+    if (!mounted) {
+        return (
+            <span className="inline-flex h-7.5 w-23 rounded-full border border-(--border) bg-(--panel)" />
+        );
     }
 
     return (
         <button
             onClick={toggle}
-            className="
-                rounded-full border px-3 py-1 text-sm
-                bg-(--panel) text-(--text) border-(--border)
-                hover:-translate-y-px transition
-            "
-            aria-label="Toggle theme"
+            className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text) hover:-translate-y-px transition"
             title="Toggle theme"
+            type="button"
         >
             {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
         </button>

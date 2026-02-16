@@ -1,4 +1,4 @@
-import GbaPlayer from "@/components/GbaPlayer";
+import GbaPlayer from "@/components/gba/GbaPlayer";
 
 export default function GbaPage() {
     return (

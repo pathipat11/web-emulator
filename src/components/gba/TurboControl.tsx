@@ -89,6 +89,9 @@ export function SettingsPanel({
                             </button>
                         ))}
                     </div>
+                    <div className="mt-2 text-xs text-(--muted)">
+                        * ถ้า core ยังไม่รองรับ setTurbo/setSpeedMultiplier จะเป็น “UI only” ก่อน
+                    </div>
                 </div>
 
                 {/* Auto Save */}

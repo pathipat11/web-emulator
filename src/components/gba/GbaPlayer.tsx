@@ -6,11 +6,15 @@ import { createMgbaWasmCore, type GbaCore } from "@/lib/gba/core-adapter";
 import { useKeyboardInput } from "@/lib/hooks/useKeyboardInput";
 import { useGamepadInput } from "@/lib/hooks/useGamepadInput";
 import type { GbaButton } from "@/lib/input";
+
 import ThemeToggle from "@/components/ThemeToggle";
 import { GbaConsole } from "@/components/gba/GbaConsole";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
 
-type Slot = 1 | 2 | 3;
+import { useTurbo } from "@/lib/hooks/useTurbo";
+import { TurboRate } from "@/lib/gba/core-adapter";
+import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
+import type { Slot } from "@/lib/storage/saveStateStore";
 
 async function hashRom(bytes: Uint8Array): Promise<string> {
     const ab = new ArrayBuffer(bytes.byteLength);
@@ -35,7 +39,7 @@ export default function GbaPlayer() {
     const [showSettings, setShowSettings] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
 
-    // audio state (fix: pause/start/reset won't override muted state)
+    // audio
     const [audioEnabled, setAudioEnabled] = useState(true);
     const audioEnabledRef = useRef(true);
 
@@ -43,6 +47,13 @@ export default function GbaPlayer() {
         audioEnabledRef.current = audioEnabled;
         coreRef.current?.setAudioEnabled?.(audioEnabled);
     }, [audioEnabled]);
+
+    // turbo (UI + apply to core if available)
+    const { turbo, setTurbo } = useTurbo(coreRef);
+
+    // auto-save toggles
+    const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+    const [autoSaveSlot, setAutoSaveSlot] = useState<Slot>(1);
 
     // inputs
     useKeyboardInput(coreRef);
@@ -78,6 +89,16 @@ export default function GbaPlayer() {
 
     const canInteract = useMemo(() => status !== "idle", [status]);
 
+    // ✅ auto-save on close (จะทำงานเมื่อ enabled + มี romHash)
+    useAutoSaveOnClose({
+        coreRef,
+        romHash: romHashState,
+        romName,
+        enabled: autoSaveEnabled && status !== "idle",
+        slot: autoSaveSlot,
+        setMessage,
+    });
+
     async function onUpload(file: File | null) {
         if (!file) return;
 
@@ -97,7 +118,13 @@ export default function GbaPlayer() {
         try {
             await coreRef.current?.loadRom(romBytes, file.name);
             setStatus(coreRef.current?.status ?? "running");
+
             coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);
+
+            // re-apply turbo after load (เผื่อ core reset)
+            const c: any = coreRef.current;
+            if (typeof c?.setTurbo === "function") c.setTurbo(turbo);
+            else if (typeof c?.setSpeedMultiplier === "function") c.setSpeedMultiplier(turbo);
         } catch (err: any) {
             console.error(err);
             setMessage(`Failed to start core: ${err?.message ?? String(err)}`);
@@ -132,7 +159,7 @@ export default function GbaPlayer() {
     }
 
     async function onSave(slot: Slot) {
-        const c = coreRef.current;
+        const c: any = coreRef.current;
         if (!c) return;
         if (!romHashState) {
             setMessage("Load a ROM first.");
@@ -140,7 +167,16 @@ export default function GbaPlayer() {
         }
 
         try {
-            await c.saveState(slot);
+            // ถ้า core มี bytes API ให้เก็บเองได้ (แนะนำ)
+            if (typeof c.saveStateBytes === "function") {
+                const bytes: Uint8Array = await c.saveStateBytes(slot);
+                const { putSaveState, putMeta } = await import("@/lib/storage/saveStateStore");
+                putSaveState(romHashState, slot, bytes);
+                putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+            } else {
+                // fallback: ใช้ของเดิม (อาจเป็น internal save ของ core)
+                await c.saveState(slot);
+            }
             setMessage(`Saved state to slot ${slot}.`);
         } catch (err: any) {
             console.error(err);
@@ -149,7 +185,7 @@ export default function GbaPlayer() {
     }
 
     async function onLoad(slot: Slot) {
-        const c = coreRef.current;
+        const c: any = coreRef.current;
         if (!c) return;
         if (!romHashState) {
             setMessage("Load a ROM first.");
@@ -157,7 +193,20 @@ export default function GbaPlayer() {
         }
 
         try {
-            await c.loadState(slot);
+            // ถ้า core รองรับ load bytes → เอาจาก localStorage
+            if (typeof c.loadStateBytes === "function") {
+                const { getSaveState } = await import("@/lib/storage/saveStateStore");
+                const bytes = getSaveState(romHashState, slot);
+                if (!bytes) {
+                    setMessage(`No save data in slot ${slot}.`);
+                    return;
+                }
+                await c.loadStateBytes(slot, bytes);
+            } else {
+                // fallback เดิม
+                await c.loadState(slot);
+            }
+
             setMessage(`Loaded state from slot ${slot}.`);
             c.setAudioEnabled?.(audioEnabledRef.current);
         } catch (err: any) {
@@ -316,7 +365,7 @@ export default function GbaPlayer() {
                 </div>
             </div>
 
-            {/* Settings Slide-over */}
+            {/* Settings */}
             <SettingsPanel
                 show={showSettings}
                 open={settingsOpen}
@@ -324,6 +373,12 @@ export default function GbaPlayer() {
                 canInteract={canInteract}
                 onSave={onSave}
                 onLoad={onLoad}
+                turbo={turbo as TurboRate}
+                setTurbo={setTurbo}
+                autoSaveEnabled={autoSaveEnabled}
+                setAutoSaveEnabled={setAutoSaveEnabled}
+                autoSaveSlot={autoSaveSlot}
+                setAutoSaveSlot={setAutoSaveSlot}
             />
         </div>
     );

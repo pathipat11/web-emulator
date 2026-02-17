@@ -4,19 +4,16 @@
 import { useEffect, useRef } from "react";
 import type { GbaCore } from "@/lib/gba/core-adapter";
 import type { Slot } from "@/lib/storage/saveStateStore";
-import { putMeta, putSaveState } from "@/lib/storage/saveStateStore";
 
 export function useAutoSaveOnClose({
     coreRef,
     romHash,
-    romName,
     enabled,
     slot = 1,
     setMessage,
 }: {
     coreRef: React.RefObject<GbaCore | null>;
     romHash: string;
-    romName: string;
     enabled: boolean;
     slot?: Slot;
     setMessage?: (s: string) => void;
@@ -27,27 +24,16 @@ export function useAutoSaveOnClose({
         if (!enabled) return;
         if (!romHash) return;
 
-        const save = async () => {
+        const save = () => {
             if (savingRef.current) return;
             savingRef.current = true;
+
             try {
                 const c: any = coreRef.current;
-                if (!c?.saveStateBytes) {
-                    // ถ้า core ไม่มี export bytes -> ให้คุณ map เองภายหลัง
-                    setMessage?.("Auto-save skipped (core has no saveStateBytes).");
-                    return;
-                }
+                if (!c?.saveState) return;
 
-                const bytes: Uint8Array = await c.saveStateBytes(slot);
-                putSaveState(romHash, slot, bytes);
-
-                putMeta({
-                    romHash,
-                    romName,
-                    updatedAt: Date.now(),
-                    lastSlot: slot,
-                });
-
+                // beforeunload/pagehide ไม่ควร await
+                c.saveState(slot);
                 setMessage?.(`Auto-saved (slot ${slot}).`);
             } catch {
                 // ignore
@@ -56,22 +42,17 @@ export function useAutoSaveOnClose({
             }
         };
 
-        const onBeforeUnload = () => {
-            // ก่อนปิดแท็บ/รีเฟรช
-            void save();
-        };
-
+        const onPageHide = () => save();
         const onVisibility = () => {
-            // สลับแท็บ/ซ่อนหน้า
-            if (document.visibilityState === "hidden") void save();
+            if (document.visibilityState === "hidden") save();
         };
 
-        window.addEventListener("beforeunload", onBeforeUnload);
+        window.addEventListener("pagehide", onPageHide);
         document.addEventListener("visibilitychange", onVisibility);
 
         return () => {
-            window.removeEventListener("beforeunload", onBeforeUnload);
+            window.removeEventListener("pagehide", onPageHide);
             document.removeEventListener("visibilitychange", onVisibility);
         };
-    }, [coreRef, romHash, romName, enabled, slot, setMessage]);
+    }, [coreRef, romHash, enabled, slot, setMessage]);
 }

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { GbaButton } from "@/lib/input";
 import { loadMgbaFactory } from "./mgba-loader";

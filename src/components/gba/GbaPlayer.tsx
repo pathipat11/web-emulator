@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
@@ -54,6 +55,7 @@ export default function GbaPlayer() {
     // auto-save toggles
     const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
     const [autoSaveSlot, setAutoSaveSlot] = useState<Slot>(1);
+    const [autoLoadOnRom, setAutoLoadOnRom] = useState(true);
 
     // inputs
     useKeyboardInput(coreRef);
@@ -89,11 +91,9 @@ export default function GbaPlayer() {
 
     const canInteract = useMemo(() => status !== "idle", [status]);
 
-    // ✅ auto-save on close (จะทำงานเมื่อ enabled + มี romHash)
     useAutoSaveOnClose({
         coreRef,
         romHash: romHashState,
-        romName,
         enabled: autoSaveEnabled && status !== "idle",
         slot: autoSaveSlot,
         setMessage,
@@ -117,6 +117,14 @@ export default function GbaPlayer() {
 
         try {
             await coreRef.current?.loadRom(romBytes, file.name);
+            if (autoLoadOnRom) {
+                try {
+                    await coreRef.current?.loadState(autoSaveSlot);
+                    setMessage(`ROM loaded: ${file.name} (auto-loaded slot ${autoSaveSlot})`);
+                } catch {
+                    // ถ้าไม่มี save ก็ปล่อยผ่าน
+                }
+            }
             setStatus(coreRef.current?.status ?? "running");
 
             coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);

@@ -3,11 +3,11 @@ import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Home() {
   const systems = [
-    { title: "GBA", desc: "Game Boy Advance (ROM: .gba) — เล่นในเบราว์เซอร์", href: "/gba", disabled: false },
+    { title: "GBA", desc: "Game Boy Advance (ROM: .gba) — Play in browser", href: "/gba", disabled: false },
     { title: "NES", desc: "Nintendo Entertainment System", href: "#", disabled: true },
     { title: "SNES", desc: "Super Nintendo", href: "#", disabled: true },
     { title: "GB", desc: "Game Boy", href: "#", disabled: true },
-    { title: "PS1", desc: "PlayStation 1 (อาจต้อง BIOS)", href: "#", disabled: true },
+    { title: "PS1", desc: "PlayStation 1 (may require BIOS)", href: "#", disabled: true },
   ];
 
   return (
@@ -17,7 +17,7 @@ export default function Home() {
           <div>
             <h1 className="text-3xl font-black tracking-tight">Web Emulator Lab</h1>
             <p className="mt-2 text-(--muted)">
-              เลือกระบบที่ต้องการจำลอง แล้วอัปโหลด ROM ของคุณเองเพื่อเล่นในเว็บ
+              Choose a system to emulate, then upload your own ROM to play in the browser.
             </p>
           </div>
 

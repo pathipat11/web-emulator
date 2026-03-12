@@ -173,7 +173,7 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
             if (audioOn) Module.resumeAudio?.();
             else Module.pauseAudio?.();
 
-            // ✅ apply turbo after resume (บาง build reset speed ตอน resume)
+            // ✅ apply turbo after resume (some builds reset speed on resume)
             applyTurboToModule(Module, turboRate);
 
             core.status = "running";
@@ -226,7 +226,7 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
             if (!Module) return;
             Module.loadState?.(slot);
 
-            // ✅ (optional) re-apply turbo after loadState (บาง build reset speed)
+            // ✅ (optional) re-apply turbo after loadState (some builds reset speed)
             applyTurboToModule(Module, turboRate);
         },
     };
@@ -235,7 +235,7 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
 }
 
 /**
- * STUB core สำหรับให้โปรเจครัน UI ได้ก่อน
+ * STUB core for running the UI without a real emulator backend
  */
 export function createStubCore(): GbaCore {
     let _canvas: HTMLCanvasElement | null = null;

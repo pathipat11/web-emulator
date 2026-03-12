@@ -68,8 +68,8 @@ export function SettingsPanel({
 
                 <div className="mt-4 rounded-2xl bg-(--panel-2) p-3 text-sm text-(--text)">
                     <div className="font-medium">Tips</div>
-                    • ต่อจอยแล้วกดปุ่มได้ทันที (Gamepad API) <br />
-                    • มือถือ: ปุ่ม overlay อยู่บนจอ (กดค้างได้)
+                    • Connect a gamepad and press buttons to play (Gamepad API) <br />
+                    • Mobile: touch overlay controls on screen (hold supported)
                 </div>
 
                 {/* Turbo */}
@@ -91,7 +91,7 @@ export function SettingsPanel({
                         ))}
                     </div>
                     <div className="mt-2 text-xs text-(--muted)">
-                        * ถ้า core ยังไม่รองรับ setTurbo/setSpeedMultiplier จะเป็น “UI only” ก่อน
+                        * If the core does not support setTurbo/setSpeedMultiplier, this will be "UI only" for now.
                     </div>
                 </div>
 

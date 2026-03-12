@@ -32,7 +32,7 @@ export function useAutoSaveOnClose({
                 const c: any = coreRef.current;
                 if (!c?.saveState) return;
 
-                // beforeunload/pagehide ไม่ควร await
+                // beforeunload/pagehide should not await
                 c.saveState(slot);
                 setMessage?.(`Auto-saved (slot ${slot}).`);
             } catch {

@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createMgbaWasmCore, type GbaCore } from "@/lib/gba/core-adapter";
 import { useKeyboardInput } from "@/lib/hooks/useKeyboardInput";
 import { useGamepadInput } from "@/lib/hooks/useGamepadInput";
@@ -11,11 +11,14 @@ import type { GbaButton } from "@/lib/input";
 import ThemeToggle from "@/components/ThemeToggle";
 import { GbaConsole } from "@/components/gba/GbaConsole";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
+import { RomLibrary } from "@/components/gba/RomLibrary";
 
 import { useTurbo } from "@/lib/hooks/useTurbo";
 import { TurboRate } from "@/lib/gba/core-adapter";
+import { useTurboShortcuts } from "@/lib/hooks/useTurboShortcuts";
 import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
 import type { Slot } from "@/lib/storage/saveStateStore";
+import { getRomBytes, touchLastPlayed, setCoverArt, upsertRomEntry, putRomBytes } from "@/lib/storage/romStore";
 
 async function hashRom(bytes: Uint8Array): Promise<string> {
     const ab = new ArrayBuffer(bytes.byteLength);
@@ -27,10 +30,13 @@ async function hashRom(bytes: Uint8Array): Promise<string> {
     return hex.slice(0, 16);
 }
 
+type Tab = "emulator" | "library";
+
 export default function GbaPlayer() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const coreRef = useRef<GbaCore | null>(null);
 
+    const [tab, setTab] = useState<Tab>("emulator");
     const [romName, setRomName] = useState("-");
     const [romHashState, setRomHashState] = useState("");
     const [status, setStatus] = useState<"idle" | "running" | "paused">("idle");
@@ -52,8 +58,16 @@ export default function GbaPlayer() {
     // turbo (UI + apply to core if available)
     const { turbo, setTurbo } = useTurbo(coreRef);
 
+    useTurboShortcuts({
+        coreRef,
+        turbo: turbo as TurboRate,
+        setTurbo,
+        holdKey: "Shift",
+        holdRate: 2,
+    });
+
     // auto-save toggles
-    const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+    const [autoSaveEnabled, setAutoSaveEnabled] = useState(false);
     const [autoSaveSlot, setAutoSaveSlot] = useState<Slot>(1);
     const [autoLoadOnRom, setAutoLoadOnRom] = useState(true);
 
@@ -111,6 +125,17 @@ export default function GbaPlayer() {
         const romBytes = new Uint8Array(buf);
 
         const romHash = await hashRom(romBytes);
+
+        // save to library automatically
+        await putRomBytes(romHash, romBytes);
+        upsertRomEntry({
+            romHash,
+            name: file.name,
+            size: romBytes.length,
+            addedAt: Date.now(),
+            lastPlayedAt: Date.now(),
+        });
+
         setRomName(file.name);
         setRomHashState(romHash);
         setMessage(`ROM loaded: ${file.name} (${romBytes.length.toLocaleString()} bytes)`);
@@ -122,14 +147,14 @@ export default function GbaPlayer() {
                     await coreRef.current?.loadState(autoSaveSlot);
                     setMessage(`ROM loaded: ${file.name} (auto-loaded slot ${autoSaveSlot})`);
                 } catch {
-                    // ถ้าไม่มี save ก็ปล่อยผ่าน
+                    // no save data yet, skip
                 }
             }
             setStatus(coreRef.current?.status ?? "running");
 
             coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);
 
-            // re-apply turbo after load (เผื่อ core reset)
+            // re-apply turbo after load (core may reset speed)
             const c: any = coreRef.current;
             if (typeof c?.setTurbo === "function") c.setTurbo(turbo);
             else if (typeof c?.setSpeedMultiplier === "function") c.setSpeedMultiplier(turbo);
@@ -138,6 +163,56 @@ export default function GbaPlayer() {
             setMessage(`Failed to start core: ${err?.message ?? String(err)}`);
         }
     }
+
+    /** Capture current canvas frame as cover art for the current ROM */
+    function saveCoverArt() {
+        if (!romHashState || !canvasRef.current) return;
+        try {
+            const url = canvasRef.current.toDataURL("image/png");
+            setCoverArt(romHashState, url);
+        } catch { /* ignore */ }
+    }
+
+    /** Load a ROM from the library by hash (no file picker needed) */
+    const loadRomFromLibrary = useCallback(
+        async (romHash: string, name: string) => {
+            // save cover art of previous ROM
+            saveCoverArt();
+
+            const bytes = await getRomBytes(romHash);
+            if (!bytes) {
+                setMessage("ROM not found in library.");
+                return;
+            }
+
+            setRomName(name);
+            setRomHashState(romHash);
+            touchLastPlayed(romHash);
+            setTab("emulator");
+            setMessage(`ROM loaded: ${name} (${bytes.length.toLocaleString()} bytes)`);
+
+            try {
+                await coreRef.current?.loadRom(bytes, name);
+                if (autoLoadOnRom) {
+                    try {
+                        await coreRef.current?.loadState(autoSaveSlot);
+                        setMessage(`ROM loaded: ${name} (auto-loaded slot ${autoSaveSlot})`);
+                    } catch { /* no save yet */ }
+                }
+                setStatus(coreRef.current?.status ?? "running");
+                coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);
+
+                const c: any = coreRef.current;
+                if (typeof c?.setTurbo === "function") c.setTurbo(turbo);
+                else if (typeof c?.setSpeedMultiplier === "function") c.setSpeedMultiplier(turbo);
+            } catch (err: any) {
+                console.error(err);
+                setMessage(`Failed to start core: ${err?.message ?? String(err)}`);
+            }
+        },
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+        [autoLoadOnRom, autoSaveSlot, turbo, romHashState],
+    );
 
     function onToggleRun() {
         const c = coreRef.current;
@@ -175,14 +250,14 @@ export default function GbaPlayer() {
         }
 
         try {
-            // ถ้า core มี bytes API ให้เก็บเองได้ (แนะนำ)
+            // use bytes API if available (preferred)
             if (typeof c.saveStateBytes === "function") {
                 const bytes: Uint8Array = await c.saveStateBytes(slot);
                 const { putSaveState, putMeta } = await import("@/lib/storage/saveStateStore");
                 putSaveState(romHashState, slot, bytes);
                 putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
             } else {
-                // fallback: ใช้ของเดิม (อาจเป็น internal save ของ core)
+                // fallback: use core's internal save
                 await c.saveState(slot);
             }
             setMessage(`Saved state to slot ${slot}.`);
@@ -201,7 +276,7 @@ export default function GbaPlayer() {
         }
 
         try {
-            // ถ้า core รองรับ load bytes → เอาจาก localStorage
+            // load bytes from localStorage if core supports it
             if (typeof c.loadStateBytes === "function") {
                 const { getSaveState } = await import("@/lib/storage/saveStateStore");
                 const bytes = getSaveState(romHashState, slot);
@@ -211,7 +286,7 @@ export default function GbaPlayer() {
                 }
                 await c.loadStateBytes(slot, bytes);
             } else {
-                // fallback เดิม
+                // fallback to core's internal load
                 await c.loadState(slot);
             }
 
@@ -232,6 +307,10 @@ export default function GbaPlayer() {
         if (!c) return;
 
         const url = c.toDataURL("image/png");
+
+        // also save as cover art
+        if (romHashState) setCoverArt(romHashState, url);
+
         const a = document.createElement("a");
         a.href = url;
         a.download = `${romName.replace(/\.[^/.]+$/, "") || "screenshot"}.png`;
@@ -292,86 +371,111 @@ export default function GbaPlayer() {
                 </div>
             </div>
 
-            {/* Centered Console */}
-            <div className="flex justify-center">
-                <div className="w-full rounded-(--radius) border bg-(--panel) border-(--border) p-4 lg:p-5 shadow-(--shadow) retro-noise">
-                    {/* Top controls */}
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                        <div className="min-w-40">
-                            <div className="text-sm font-medium text-(--muted)">ROM: {romName}</div>
-                            <div className="text-xs uppercase tracking-wide text-(--muted)">Status</div>
-                            <div className="text-xs text-(--muted)">
-                                {status === "idle" ? "Idle" : status === "running" ? "Running" : "Paused"}
+            {/* Tab bar */}
+            <div className="mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1">
+                {(["emulator", "library"] as const).map((t) => (
+                    <button
+                        key={t}
+                        onClick={() => setTab(t)}
+                        className={[
+                            "flex-1 rounded-(--radius) px-4 py-2 text-sm font-medium transition",
+                            tab === t
+                                ? "bg-(--accent) text-white shadow-sm"
+                                : "text-(--muted) hover:text-(--text)",
+                        ].join(" ")}
+                        type="button"
+                    >
+                        {t === "emulator" ? "🎮 Emulator" : "📚 Library"}
+                    </button>
+                ))}
+            </div>
+
+            {tab === "emulator" ? (
+                <>
+                    {/* Centered Console */}
+                    <div className="flex justify-center">
+                        <div className="w-full rounded-(--radius) border bg-(--panel) border-(--border) p-4 lg:p-5 shadow-(--shadow) retro-noise">
+                            {/* Top controls */}
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="min-w-40">
+                                    <div className="text-sm font-medium text-(--muted)">ROM: {romName}</div>
+                                    <div className="text-xs uppercase tracking-wide text-(--muted)">Status</div>
+                                    <div className="text-xs text-(--muted)">
+                                        {status === "idle" ? "Idle" : status === "running" ? "Running" : "Paused"}
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
+                                        <input
+                                            type="checkbox"
+                                            className="h-4 w-4"
+                                            checked={audioEnabled}
+                                            onChange={(e) => setAudioEnabled(e.target.checked)}
+                                        />
+                                        Audio
+                                    </label>
+
+                                    <button
+                                        onClick={onToggleRun}
+                                        className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105"
+                                        disabled={status === "idle"}
+                                        type="button"
+                                    >
+                                        {status === "running" ? "Pause" : "Run"}
+                                    </button>
+
+                                    <button
+                                        onClick={onReset}
+                                        className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
+                                        disabled={status === "idle"}
+                                        type="button"
+                                    >
+                                        Reset
+                                    </button>
+
+                                    <button
+                                        onClick={onFullscreen}
+                                        className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
+                                        disabled={status === "idle"}
+                                        type="button"
+                                    >
+                                        Fullscreen
+                                    </button>
+
+                                    <button
+                                        onClick={onScreenshot}
+                                        className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
+                                        disabled={status === "idle"}
+                                        type="button"
+                                    >
+                                        Screenshot
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Screen */}
+                            <GbaConsole canvasRef={canvasRef} status={status} onPress={press} onRelease={release} />
+
+                            {/* Bottom row */}
+                            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="text-sm text-(--muted)">{message}</div>
+
+                                <label className="inline-flex items-center gap-2">
+                                    <input
+                                        type="file"
+                                        accept=".gba"
+                                        className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)"
+                                        onChange={(e) => onUpload(e.target.files?.[0] ?? null)}
+                                    />
+                                </label>
                             </div>
                         </div>
-
-                        <div className="flex flex-wrap items-center gap-2">
-                            <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
-                                <input
-                                    type="checkbox"
-                                    className="h-4 w-4"
-                                    checked={audioEnabled}
-                                    onChange={(e) => setAudioEnabled(e.target.checked)}
-                                />
-                                Audio
-                            </label>
-
-                            <button
-                                onClick={onToggleRun}
-                                className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105"
-                                disabled={status === "idle"}
-                                type="button"
-                            >
-                                {status === "running" ? "Pause" : "Run"}
-                            </button>
-
-                            <button
-                                onClick={onReset}
-                                className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                                disabled={status === "idle"}
-                                type="button"
-                            >
-                                Reset
-                            </button>
-
-                            <button
-                                onClick={onFullscreen}
-                                className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                                disabled={status === "idle"}
-                                type="button"
-                            >
-                                Fullscreen
-                            </button>
-
-                            <button
-                                onClick={onScreenshot}
-                                className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                                disabled={status === "idle"}
-                                type="button"
-                            >
-                                Screenshot
-                            </button>
-                        </div>
                     </div>
-
-                    {/* Screen */}
-                    <GbaConsole canvasRef={canvasRef} status={status} onPress={press} onRelease={release} />
-
-                    {/* Bottom row */}
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="text-sm text-(--muted)">{message}</div>
-
-                        <label className="inline-flex items-center gap-2">
-                            <input
-                                type="file"
-                                accept=".gba"
-                                className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)"
-                                onChange={(e) => onUpload(e.target.files?.[0] ?? null)}
-                            />
-                        </label>
-                    </div>
-                </div>
-            </div>
+                </>
+            ) : (
+                <RomLibrary onPlay={loadRomFromLibrary} />
+            )}
 
             {/* Settings */}
             <SettingsPanel

@@ -12,11 +12,13 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { GbaConsole } from "@/components/gba/GbaConsole";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
 import { RomLibrary } from "@/components/gba/RomLibrary";
+import Link from "next/link";
 
 import { useTurbo } from "@/lib/hooks/useTurbo";
 import { TurboRate } from "@/lib/gba/core-adapter";
 import { useTurboShortcuts } from "@/lib/hooks/useTurboShortcuts";
 import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
+import { useKeymap } from "@/lib/hooks/useKeymap";
 import type { Slot } from "@/lib/storage/saveStateStore";
 import { getRomBytes, touchLastPlayed, setCoverArt, upsertRomEntry, putRomBytes } from "@/lib/storage/romStore";
 
@@ -35,6 +37,7 @@ type Tab = "emulator" | "library";
 export default function GbaPlayer() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const coreRef = useRef<GbaCore | null>(null);
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const [tab, setTab] = useState<Tab>("emulator");
     const [romName, setRomName] = useState("-");
@@ -71,8 +74,11 @@ export default function GbaPlayer() {
     const [autoSaveSlot, setAutoSaveSlot] = useState<Slot>(1);
     const [autoLoadOnRom, setAutoLoadOnRom] = useState(true);
 
+    // keymap (remappable)
+    const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap();
+
     // inputs
-    useKeyboardInput(coreRef);
+    useKeyboardInput(coreRef, keymap);
     useGamepadInput(coreRef, setGamepadInfo);
 
     // init core + canvas
@@ -100,6 +106,12 @@ export default function GbaPlayer() {
 
         return () => {
             cancelled = true;
+            // stop core when component unmounts (e.g. navigating away)
+            const c = coreRef.current;
+            if (c) {
+                c.pause();
+                c.setAudioEnabled?.(false);
+            }
         };
     }, []);
 
@@ -241,6 +253,34 @@ export default function GbaPlayer() {
         setMessage("Reset.");
     }
 
+    function onEject() {
+        const c = coreRef.current;
+        if (!c) return;
+
+        // save cover art before ejecting
+        saveCoverArt();
+
+        c.pause();
+        c.setAudioEnabled?.(false);
+        setStatus("idle");
+        setRomName("-");
+        setRomHashState("");
+        setMessage("ROM ejected. Upload or pick a ROM to play.");
+
+        // reset file input so the same file can be re-selected
+        if (fileInputRef.current) fileInputRef.current.value = "";
+
+        // clear canvas to black
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext("2d");
+            if (ctx) {
+                ctx.fillStyle = "#000";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+    }
+
     async function onSave(slot: Slot) {
         const c: any = coreRef.current;
         if (!c) return;
@@ -355,6 +395,13 @@ export default function GbaPlayer() {
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 text-sm">
+                    <Link
+                        href="/"
+                        className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text) hover:-translate-y-px transition"
+                    >
+                        ← Home
+                    </Link>
+
                     <span className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text)">
                         Controller: {gamepadInfo}
                     </span>
@@ -390,92 +437,106 @@ export default function GbaPlayer() {
                 ))}
             </div>
 
-            {tab === "emulator" ? (
-                <>
-                    {/* Centered Console */}
-                    <div className="flex justify-center">
-                        <div className="w-full rounded-(--radius) border bg-(--panel) border-(--border) p-4 lg:p-5 shadow-(--shadow) retro-noise">
-                            {/* Top controls */}
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="min-w-40">
-                                    <div className="text-sm font-medium text-(--muted)">ROM: {romName}</div>
-                                    <div className="text-xs uppercase tracking-wide text-(--muted)">Status</div>
-                                    <div className="text-xs text-(--muted)">
-                                        {status === "idle" ? "Idle" : status === "running" ? "Running" : "Paused"}
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
-                                        <input
-                                            type="checkbox"
-                                            className="h-4 w-4"
-                                            checked={audioEnabled}
-                                            onChange={(e) => setAudioEnabled(e.target.checked)}
-                                        />
-                                        Audio
-                                    </label>
-
-                                    <button
-                                        onClick={onToggleRun}
-                                        className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105"
-                                        disabled={status === "idle"}
-                                        type="button"
-                                    >
-                                        {status === "running" ? "Pause" : "Run"}
-                                    </button>
-
-                                    <button
-                                        onClick={onReset}
-                                        className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                                        disabled={status === "idle"}
-                                        type="button"
-                                    >
-                                        Reset
-                                    </button>
-
-                                    <button
-                                        onClick={onFullscreen}
-                                        className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                                        disabled={status === "idle"}
-                                        type="button"
-                                    >
-                                        Fullscreen
-                                    </button>
-
-                                    <button
-                                        onClick={onScreenshot}
-                                        className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                                        disabled={status === "idle"}
-                                        type="button"
-                                    >
-                                        Screenshot
-                                    </button>
+            {/* Emulator — always mounted, hidden when on library tab */}
+            <div className={tab !== "emulator" ? "hidden" : ""}>
+                {/* Centered Console */}
+                <div className="flex justify-center">
+                    <div className="w-full rounded-(--radius) border bg-(--panel) border-(--border) p-4 lg:p-5 shadow-(--shadow) retro-noise">
+                        {/* Top controls */}
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                            <div className="min-w-40">
+                                <div className="text-sm font-medium text-(--muted)">ROM: {romName}</div>
+                                <div className="text-xs uppercase tracking-wide text-(--muted)">Status</div>
+                                <div className="text-xs text-(--muted)">
+                                    {status === "idle" ? "Idle" : status === "running" ? "Running" : "Paused"}
                                 </div>
                             </div>
 
-                            {/* Screen */}
-                            <GbaConsole canvasRef={canvasRef} status={status} onPress={press} onRelease={release} />
-
-                            {/* Bottom row */}
-                            <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="text-sm text-(--muted)">{message}</div>
-
-                                <label className="inline-flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
+                                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
                                     <input
-                                        type="file"
-                                        accept=".gba"
-                                        className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)"
-                                        onChange={(e) => onUpload(e.target.files?.[0] ?? null)}
+                                        type="checkbox"
+                                        className="h-4 w-4"
+                                        checked={audioEnabled}
+                                        onChange={(e) => setAudioEnabled(e.target.checked)}
                                     />
+                                    Audio
                                 </label>
+
+                                <button
+                                    onClick={onToggleRun}
+                                    className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105"
+                                    disabled={status === "idle"}
+                                    type="button"
+                                >
+                                    {status === "running" ? "Pause" : "Run"}
+                                </button>
+
+                                <button
+                                    onClick={onReset}
+                                    className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
+                                    disabled={status === "idle"}
+                                    type="button"
+                                >
+                                    Reset
+                                </button>
+
+                                <button
+                                    onClick={onEject}
+                                    className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition"
+                                    disabled={status === "idle"}
+                                    type="button"
+                                >
+                                    Eject
+                                </button>
+
+                                <button
+                                    onClick={onFullscreen}
+                                    className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
+                                    disabled={status === "idle"}
+                                    type="button"
+                                >
+                                    Fullscreen
+                                </button>
+
+                                <button
+                                    onClick={onScreenshot}
+                                    className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
+                                    disabled={status === "idle"}
+                                    type="button"
+                                >
+                                    Screenshot
+                                </button>
                             </div>
                         </div>
+
+                        {/* Screen */}
+                        <GbaConsole canvasRef={canvasRef} status={status} onPress={press} onRelease={release} />
+
+                        {/* Bottom row */}
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-sm text-(--muted)">{message}</div>
+
+                            <label className="inline-flex items-center gap-2">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".gba"
+                                    className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)"
+                                    onChange={(e) => {
+                                        onUpload(e.target.files?.[0] ?? null);
+                                        // reset so the same file can be re-selected
+                                        e.target.value = "";
+                                    }}
+                                />
+                            </label>
+                        </div>
                     </div>
-                </>
-            ) : (
-                <RomLibrary onPlay={loadRomFromLibrary} />
-            )}
+                </div>
+            </div>
+
+            {/* Library — only rendered when on library tab */}
+            {tab === "library" && <RomLibrary onPlay={loadRomFromLibrary} />}
 
             {/* Settings */}
             <SettingsPanel
@@ -491,6 +552,9 @@ export default function GbaPlayer() {
                 setAutoSaveEnabled={setAutoSaveEnabled}
                 autoSaveSlot={autoSaveSlot}
                 setAutoSaveSlot={setAutoSaveSlot}
+                keymap={keymap}
+                onSetKey={setKeymapKey}
+                onResetKeymap={resetKeymap}
             />
         </div>
     );

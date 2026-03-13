@@ -1,10 +1,10 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 "use client";
 
-import { KeyboardHintsGrid } from "@/components/gba/KeyboardHints";
+import { KeymapEditor } from "@/components/gba/KeymapEditor";
 import type { Slot } from "@/lib/storage/saveStateStore";
-import type { useTurbo } from "@/lib/hooks/useTurbo";
 import { TurboRate } from "@/lib/gba/core-adapter";
+import type { GbaButton } from "@/lib/input";
+import type { Keymap } from "@/lib/hooks/useKeymap";
 
 export function SettingsPanel({
     show,
@@ -21,6 +21,10 @@ export function SettingsPanel({
     setAutoSaveEnabled,
     autoSaveSlot,
     setAutoSaveSlot,
+
+    keymap,
+    onSetKey,
+    onResetKeymap,
 }: {
     show: boolean;
     open: boolean;
@@ -37,6 +41,10 @@ export function SettingsPanel({
     setAutoSaveEnabled: (v: boolean) => void;
     autoSaveSlot: Slot;
     setAutoSaveSlot: (s: Slot) => void;
+
+    keymap: Keymap;
+    onSetKey: (code: string, button: GbaButton) => void;
+    onResetKeymap: () => void;
 }) {
     if (!show) return null;
 
@@ -158,10 +166,11 @@ export function SettingsPanel({
                     </div>
                 </div>
 
-                {/* Keyboard */}
+                {/* Keyboard Controls */}
                 <div className="mt-6">
                     <div className="text-base font-semibold">Keyboard Controls</div>
-                    <KeyboardHintsGrid />
+                    <div className="mt-1 text-xs text-(--muted)">Click a button, then press a key to rebind.</div>
+                    <KeymapEditor keymap={keymap} onSetKey={onSetKey} onReset={onResetKeymap} />
                 </div>
             </div>
         </>

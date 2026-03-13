@@ -5,6 +5,14 @@
   "hints": {
     "axe/forms": "off",
     "no-inline-styles": "off",
-    "axe/keyboard": "off"
+    "axe/keyboard": "off",
+    "compat-api/css": [
+      "default",
+      {
+        "ignore": [
+          "image-rendering: crisp-edges"
+        ]
+      }
+    ]
   }
 }

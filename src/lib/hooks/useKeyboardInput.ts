@@ -1,14 +1,19 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect } from "react";
-import { defaultKeymap } from "@/lib/input";
+import { defaultKeymap, type GbaButton } from "@/lib/input";
 import type { GbaCore } from "@/lib/gba/core-adapter";
 
-export function useKeyboardInput(coreRef: React.RefObject<GbaCore | null>) {
+export function useKeyboardInput(
+    coreRef: React.RefObject<GbaCore | null>,
+    keymap?: Record<string, GbaButton>,
+) {
     useEffect(() => {
+        const map = keymap ?? defaultKeymap;
+
         const onKeyDown = (e: KeyboardEvent) => {
             const core = coreRef.current;
             if (!core) return;
-            const btn = defaultKeymap[e.code];
+            const btn = map[e.code];
             if (!btn) return;
             if (btn === "UP" || btn === "DOWN" || btn === "LEFT" || btn === "RIGHT") e.preventDefault();
             core.press(btn);
@@ -17,7 +22,7 @@ export function useKeyboardInput(coreRef: React.RefObject<GbaCore | null>) {
         const onKeyUp = (e: KeyboardEvent) => {
             const core = coreRef.current;
             if (!core) return;
-            const btn = defaultKeymap[e.code];
+            const btn = map[e.code];
             if (!btn) return;
             core.release(btn);
         };
@@ -28,5 +33,5 @@ export function useKeyboardInput(coreRef: React.RefObject<GbaCore | null>) {
             window.removeEventListener("keydown", onKeyDown as any);
             window.removeEventListener("keyup", onKeyUp as any);
         };
-    }, [coreRef]);
+    }, [coreRef, keymap]);
 }

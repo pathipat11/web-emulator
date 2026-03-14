@@ -1,18 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { ABCluster, DPad, StartSelect } from "@/components/gba/TouchControls";
-
 export function GbaConsole({
     canvasRef,
     status,
-    onPress,
-    onRelease,
 }: {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
     status: "idle" | "running" | "paused";
-    onPress: (btn: any) => void;
-    onRelease: (btn: any) => void;
+    onPress?: (btn: any) => void;
+    onRelease?: (btn: any) => void;
 }) {
     return (
         <div className="mt-5">
@@ -41,21 +37,6 @@ export function GbaConsole({
                                     </div>
                                 </div>
                             )}
-
-                            {/* Mobile overlay controls */}
-                            <div className="pointer-events-none absolute inset-0 lg:hidden">
-                                <div className="pointer-events-auto absolute bottom-3 left-3">
-                                    <DPad onPress={onPress} onRelease={onRelease} />
-                                </div>
-
-                                <div className="pointer-events-auto absolute bottom-3 right-3">
-                                    <ABCluster onPress={onPress} onRelease={onRelease} />
-                                </div>
-
-                                <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2">
-                                    <StartSelect onPress={onPress} onRelease={onRelease} />
-                                </div>
-                            </div>
                         </div>
 
                         <div className="mt-4 flex items-center justify-between">

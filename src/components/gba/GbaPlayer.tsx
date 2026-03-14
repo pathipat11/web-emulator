@@ -10,6 +10,7 @@ import type { GbaButton } from "@/lib/input";
 
 import ThemeToggle from "@/components/ThemeToggle";
 import { GbaConsole } from "@/components/gba/GbaConsole";
+import { MobileControls } from "@/components/gba/MobileControls";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
 import { RomLibrary } from "@/components/gba/RomLibrary";
 import Link from "next/link";
@@ -511,7 +512,10 @@ export default function GbaPlayer() {
                         </div>
 
                         {/* Screen */}
-                        <GbaConsole canvasRef={canvasRef} status={status} onPress={press} onRelease={release} />
+                        <GbaConsole canvasRef={canvasRef} status={status} />
+
+                        {/* Mobile touch controls — below screen */}
+                        <MobileControls onPress={press} onRelease={release} />
 
                         {/* Bottom row */}
                         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

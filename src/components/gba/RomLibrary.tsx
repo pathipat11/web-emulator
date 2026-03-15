@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { RomDropzone } from "./RomDropzone";
+import { ConfirmDialog } from "./ConfirmDialog";
 import {
     type RomEntry,
     getRomList,
@@ -31,6 +32,7 @@ type Props = {
 export function RomLibrary({ onPlay }: Props) {
     const [list, setList] = useState<RomEntry[]>([]);
     const [toast, setToast] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<RomEntry | null>(null);
 
     const refresh = useCallback(() => setList(getRomList()), []);
 
@@ -160,7 +162,7 @@ export function RomLibrary({ onPlay }: Props) {
                                     Play
                                 </button>
                                 <button
-                                    onClick={() => handleDelete(entry.romHash)}
+                                    onClick={() => setDeleteTarget(entry)}
                                     className="rounded-xl border px-3 py-1.5 text-xs transition active:translate-y-px border-(--border) text-(--muted) hover:text-red-500"
                                     type="button"
                                 >
@@ -171,6 +173,20 @@ export function RomLibrary({ onPlay }: Props) {
                     ))}
                 </div>
             )}
+
+            {/* Delete confirm */}
+            <ConfirmDialog
+                open={deleteTarget !== null}
+                title="Delete ROM"
+                message={`Permanently delete "${deleteTarget?.name ?? ""}" and its save data from the library?`}
+                confirmLabel="Delete"
+                danger
+                onConfirm={() => {
+                    if (deleteTarget) handleDelete(deleteTarget.romHash);
+                    setDeleteTarget(null);
+                }}
+                onCancel={() => setDeleteTarget(null)}
+            />
         </div>
     );
 }

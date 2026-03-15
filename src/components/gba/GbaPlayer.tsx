@@ -12,6 +12,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 import { GbaConsole } from "@/components/gba/GbaConsole";
 import { MobileControls } from "@/components/gba/MobileControls";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
+import { ConfirmDialog } from "@/components/gba/ConfirmDialog";
 import { RomLibrary } from "@/components/gba/RomLibrary";
 import Link from "next/link";
 
@@ -49,6 +50,7 @@ export default function GbaPlayer() {
     const [gamepadInfo, setGamepadInfo] = useState("No controller");
     const [showSettings, setShowSettings] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [showEjectConfirm, setShowEjectConfirm] = useState(false);
 
     // audio
     const [audioEnabled, setAudioEnabled] = useState(true);
@@ -483,7 +485,7 @@ export default function GbaPlayer() {
                                 </button>
 
                                 <button
-                                    onClick={onEject}
+                                    onClick={() => setShowEjectConfirm(true)}
                                     className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition"
                                     disabled={status === "idle"}
                                     type="button"
@@ -559,6 +561,20 @@ export default function GbaPlayer() {
                 keymap={keymap}
                 onSetKey={setKeymapKey}
                 onResetKeymap={resetKeymap}
+            />
+
+            {/* Eject confirm */}
+            <ConfirmDialog
+                open={showEjectConfirm}
+                title="Eject ROM"
+                message={`Remove "${romName}" from the emulator? Your save states in the library are kept.`}
+                confirmLabel="Eject"
+                danger
+                onConfirm={() => {
+                    setShowEjectConfirm(false);
+                    onEject();
+                }}
+                onCancel={() => setShowEjectConfirm(false)}
             />
         </div>
     );

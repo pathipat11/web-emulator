@@ -246,7 +246,7 @@ export default function NesPlayer() {
     function release(btn: NesButton) { coreRef.current?.release(btn); }
 
     return (
-        <div className="mx-auto w-full max-w-4xl p-4 lg:p-6">
+        <div className="mx-auto w-full max-w-5xl p-4 lg:p-6">
             {/* Header */}
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                 <div>
@@ -275,37 +275,43 @@ export default function NesPlayer() {
 
             {/* Emulator */}
             <div className={tab !== "emulator" ? "hidden" : ""}>
-                <div className="flex justify-center">
-                    <div className="w-full rounded-(--radius) border bg-(--panel) border-(--border) p-4 lg:p-5 shadow-(--shadow) retro-noise">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="min-w-40">
-                                <div className="text-sm font-medium text-(--muted)">ROM: {romName}</div>
-                                <div className="text-xs uppercase tracking-wide text-(--muted)">Status</div>
-                                <div className="text-xs text-(--muted)">{status === "idle" ? "Idle" : status === "running" ? "Running" : "Paused"}</div>
-                            </div>
-                            <div className="flex flex-wrap items-center gap-2">
-                                <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
-                                    <input type="checkbox" className="h-4 w-4" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />
-                                    Audio
-                                </label>
-                                <button onClick={onToggleRun} className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105" disabled={status === "idle"} type="button">{status === "running" ? "Pause" : "Run"}</button>
-                                <button onClick={onReset} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Reset</button>
-                                <button onClick={() => setShowEjectConfirm(true)} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition" disabled={status === "idle"} type="button">Eject</button>
-                                <button onClick={onFullscreen} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Fullscreen</button>
-                                <button onClick={onScreenshot} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Screenshot</button>
-                            </div>
-                        </div>
-
-                        <NesConsole canvasRef={canvasRef} status={status} />
-                        <NesMobileControls onPress={press} onRelease={release} />
-
-                        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="text-sm text-(--muted)">{message}</div>
-                            <label className="inline-flex items-center gap-2">
-                                <input ref={fileInputRef} type="file" accept=".nes" className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)" onChange={(e) => { onUpload(e.target.files?.[0] ?? null); e.target.value = ""; }} />
-                            </label>
-                        </div>
+                {/* Controls bar */}
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <div className="text-sm font-medium text-(--text) truncate max-w-48">{romName !== "-" ? romName : "No ROM"}</div>
+                        <div className={[
+                            "h-2 w-2 rounded-full",
+                            status === "running" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]"
+                                : status === "paused" ? "bg-yellow-400"
+                                    : "bg-(--muted)/40",
+                        ].join(" ")} />
                     </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
+                            <input type="checkbox" className="h-4 w-4" checked={audioEnabled} onChange={(e) => setAudioEnabled(e.target.checked)} />
+                            Audio
+                        </label>
+                        <button onClick={onToggleRun} className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105" disabled={status === "idle"} type="button">{status === "running" ? "Pause" : "Run"}</button>
+                        <button onClick={onReset} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Reset</button>
+                        <button onClick={() => setShowEjectConfirm(true)} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition" disabled={status === "idle"} type="button">Eject</button>
+                        <button onClick={onFullscreen} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Fullscreen</button>
+                        <button onClick={onScreenshot} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Screenshot</button>
+                    </div>
+                </div>
+
+                {/* Screen — full width, no extra wrapper */}
+                <NesConsole canvasRef={canvasRef} status={status} />
+
+                {/* Mobile touch controls */}
+                <NesMobileControls onPress={press} onRelease={release} />
+
+                {/* Bottom row */}
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="text-sm text-(--muted)">{message}</div>
+                    <label className="inline-flex items-center gap-2">
+                        <input ref={fileInputRef} type="file" accept=".nes" className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)" onChange={(e) => { onUpload(e.target.files?.[0] ?? null); e.target.value = ""; }} />
+                    </label>
                 </div>
             </div>
 

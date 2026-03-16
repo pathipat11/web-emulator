@@ -4,7 +4,7 @@ import ThemeToggle from "@/components/ThemeToggle";
 export default function Home() {
   const systems = [
     { title: "GBA", desc: "Game Boy Advance — Play .gba ROMs in browser", href: "/gba", disabled: false, image: "/images/gba.jpeg" },
-    { title: "NES", desc: "Nintendo Entertainment System", href: "#", disabled: true, image: "/images/nes.jpeg" },
+    { title: "NES", desc: "Nintendo Entertainment System — Play .nes ROMs in browser", href: "/nes", disabled: false, image: "/images/nes.jpeg" },
     { title: "SNES", desc: "Super Nintendo Entertainment System", href: "#", disabled: true, image: "/images/SNES.jpeg" },
     { title: "GB", desc: "Game Boy", href: "#", disabled: true, image: "/images/gb.jpeg" },
     { title: "PS1", desc: "PlayStation 1 (may require BIOS)", href: "#", disabled: true, image: "/images/Ps1.jpeg" },

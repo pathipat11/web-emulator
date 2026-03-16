@@ -5,10 +5,10 @@ export default function Home() {
   const systems = [
     { title: "GBA", desc: "Game Boy Advance — Play .gba ROMs in browser", href: "/gba", disabled: false, image: "/images/gba.jpeg" },
     { title: "NES", desc: "Nintendo Entertainment System — Play .nes ROMs in browser", href: "/nes", disabled: false, image: "/images/nes.jpeg" },
+    { title: "NDS", desc: "Nintendo DS — Play .nds ROMs in browser", href: "/ds", disabled: false, image: "/images/ds.jpeg" },
     { title: "SNES", desc: "Super Nintendo Entertainment System", href: "#", disabled: true, image: "/images/SNES.jpeg" },
     { title: "GB", desc: "Game Boy", href: "#", disabled: true, image: "/images/gb.jpeg" },
     { title: "PS1", desc: "PlayStation 1 (may require BIOS)", href: "#", disabled: true, image: "/images/Ps1.jpeg" },
-    { title: "NDS", desc: "Nintendo DS — Dual-screen handheld console", href: "#", disabled: true, image: "/images/ds.jpeg" },
   ];
 
   return (

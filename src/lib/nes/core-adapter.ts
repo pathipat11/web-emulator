@@ -98,7 +98,14 @@ export function createJsnesCore(): NesCore {
         if (rafId !== null) return;
         const tick = () => {
             if (nes && core.status === "running") {
-                nes.frame();
+                try {
+                    nes.frame();
+                } catch (e) {
+                    console.error("[NES] frame error:", e);
+                    core.status = "paused";
+                    stopLoop();
+                    return;
+                }
             }
             rafId = requestAnimationFrame(tick);
         };
@@ -124,6 +131,10 @@ export function createJsnesCore(): NesCore {
         loadRom(romBytes, _fileName) {
             if (!canvasEl || !ctx) throw new Error("Canvas not attached");
 
+            // Stop previous game if any
+            stopLoop();
+            audioSamples.length = 0;
+
             // Lazy-import jsnes
             const jsnes = require("jsnes");
 
@@ -137,7 +148,19 @@ export function createJsnesCore(): NesCore {
             const romStr = Array.from(romBytes)
                 .map((b) => String.fromCharCode(b))
                 .join("");
-            nes.loadROM(romStr);
+
+            try {
+                nes.loadROM(romStr);
+            } catch (e: any) {
+                nes = null;
+                const msg = e?.message ?? String(e);
+                if (msg.includes("Unsupported mapper")) {
+                    throw new Error(
+                        `${msg}. This ROM uses a mapper that JSNES does not support. Try a different ROM (mappers 0–4 work best).`
+                    );
+                }
+                throw e;
+            }
 
             if (audioEnabled) initAudio();
 
@@ -164,9 +187,16 @@ export function createJsnesCore(): NesCore {
 
         reset() {
             if (!nes) return;
-            nes.reset();
+            stopLoop();
+            try {
+                nes.reloadROM();
+            } catch {
+                // fallback to basic reset
+                nes.reset();
+            }
             core.status = "running";
             if (audioEnabled) audioCtx?.resume();
+            audioSamples.length = 0;
             startLoop();
         },
 

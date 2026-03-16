@@ -136,6 +136,14 @@ export default function GbaPlayer() {
             return;
         }
 
+        // stop current game before loading a new one
+        const prev = coreRef.current;
+        if (prev && prev.status !== "idle") {
+            saveCoverArt();
+            prev.pause();
+            prev.setAudioEnabled?.(false);
+        }
+
         const buf = await file.arrayBuffer();
         const romBytes = new Uint8Array(buf);
 
@@ -191,8 +199,13 @@ export default function GbaPlayer() {
     /** Load a ROM from the library by hash (no file picker needed) */
     const loadRomFromLibrary = useCallback(
         async (romHash: string, name: string) => {
-            // save cover art of previous ROM
-            saveCoverArt();
+            // stop current game before loading a new one
+            const prev = coreRef.current;
+            if (prev && prev.status !== "idle") {
+                saveCoverArt();
+                prev.pause();
+                prev.setAudioEnabled?.(false);
+            }
 
             const bytes = await getRomBytes(romHash);
             if (!bytes) {

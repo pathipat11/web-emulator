@@ -8,6 +8,7 @@ export default function Home() {
     { title: "SNES", desc: "Super Nintendo Entertainment System", href: "#", disabled: true, image: "/images/SNES.jpeg" },
     { title: "GB", desc: "Game Boy", href: "#", disabled: true, image: "/images/gb.jpeg" },
     { title: "PS1", desc: "PlayStation 1 (may require BIOS)", href: "#", disabled: true, image: "/images/Ps1.jpeg" },
+    { title: "NDS", desc: "Nintendo DS — Dual-screen handheld console", href: "#", disabled: true, image: "/images/ds.jpeg" },
   ];
 
   return (

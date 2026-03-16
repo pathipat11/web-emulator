@@ -8,6 +8,7 @@ A browser-based retro game emulator platform built with Next.js 16, React 19, an
 | --- | --- | --- | --- |
 | Game Boy Advance | ✅ Available | mGBA (WASM) | `.gba` |
 | NES | ✅ Available | JSNES | `.nes` |
+| Nintendo DS | ✅ Available | EmulatorJS (DeSmuME) | `.nds` |
 | SNES | 🚧 Coming soon | — | — |
 | Game Boy | 🚧 Coming soon | — | — |
 | PlayStation 1 | 🚧 Coming soon | — | — |
@@ -39,34 +40,47 @@ Powered by [JSNES](https://github.com/bfirsh/jsnes), a JavaScript NES emulator. 
 - 3 save state slots (JSON-serialized emulator state stored in localStorage)
 - Remappable keyboard controls via the NES Keymap Editor
 - Gamepad support with NES-specific button mapping (no L/R shoulders)
-- Mobile touch controls (D-Pad, A/B, Start/Select) — no shoulder buttons since NES doesn't have them
+- Mobile touch controls (D-Pad, A/B, Start/Select)
 - Screenshot capture with cover art
 - Fullscreen mode
 - Audio toggle with Web Audio API (`AudioContext` + `ScriptProcessorNode`)
 
+### Nintendo DS Emulator
+
+Powered by [EmulatorJS](https://emulatorjs.org/) using the DeSmuME 2015 core. Unlike GBA and NES which use custom core adapters, the DS emulator runs EmulatorJS inside a sandboxed `<iframe>`. The ROM is passed as a Blob URL, and EmulatorJS handles rendering, input, audio, and save states internally.
+
+- Upload `.nds` ROMs and play instantly
+- Separate DS ROM Library (IndexedDB + localStorage)
+- EmulatorJS provides built-in controls: keyboard, gamepad, and on-screen touch buttons
+- EmulatorJS built-in save state management via its own toolbar
+- Fullscreen mode
+- Eject ROM to return to idle state
+
 ### Shared Features
 
-- Home page with a system selection card grid — each system shows its status (available / coming soon)
+- Home page with a system selection card grid — each system shows its availability status
 - Dark / Light theme toggle with system preference detection, applied via a blocking `<script>` to prevent flash
 - Responsive layout for desktop and mobile
-- Settings panel slides in as a modal drawer (dismissible with `Escape`)
+- Settings panel slides in as a modal drawer (dismissible with `Escape`) — GBA and NES
 - Confirm dialogs for destructive actions (eject ROM, delete from library)
 
 ## Architecture
 
 ### Emulator Core Adapters
 
-Each system has its own core adapter that implements a common interface pattern:
+Each system uses a different emulation strategy:
 
-- `GbaCore` (`src/lib/gba/core-adapter.ts`) — wraps the mGBA WASM Module, handling ROM loading via the virtual filesystem, button mapping, save states, audio control, and turbo speed. Includes a stub core for UI development without the real backend.
-- `NesCore` (`src/lib/nes/core-adapter.ts`) — wraps JSNES, converting ROM bytes to the string format JSNES expects, managing the frame loop, rendering pixel data to canvas via `ImageData`, and handling audio through `ScriptProcessorNode`.
+- **GBA** — `GbaCore` (`src/lib/gba/core-adapter.ts`) wraps the mGBA WASM Module, handling ROM loading via a virtual filesystem, button mapping, save states, audio control, and turbo speed. Includes a stub core for UI development.
+- **NES** — `NesCore` (`src/lib/nes/core-adapter.ts`) wraps JSNES, converting ROM bytes to the string format JSNES expects, managing the frame loop, rendering pixel data to canvas via `ImageData`, and handling audio through `ScriptProcessorNode`.
+- **DS** — No custom core adapter. The `DsPlayer` component generates an HTML document that loads EmulatorJS from CDN (`cdn.emulatorjs.org`), passes the ROM as a Blob URL, and renders it in an `<iframe>`. EmulatorJS handles all emulation internally.
 
 ### Input System
 
-Each system defines its own button type, default keymap, and gamepad mapping:
+GBA and NES each define their own button type, default keymap, and gamepad mapping:
 
 - GBA: `A`, `B`, `L`, `R`, `START`, `SELECT`, `UP`, `DOWN`, `LEFT`, `RIGHT`
 - NES: `A`, `B`, `START`, `SELECT`, `UP`, `DOWN`, `LEFT`, `RIGHT` (no shoulder buttons)
+- DS: Input handled entirely by EmulatorJS inside the iframe
 
 Input is handled through dedicated React hooks per system:
 - `useKeyboardInput` / `useNesKeyboardInput` — keyboard event listeners mapped through the active keymap
@@ -75,11 +89,18 @@ Input is handled through dedicated React hooks per system:
 
 ### Storage Layer
 
-ROM bytes are stored in IndexedDB (no size limits), while metadata and save states use localStorage for fast synchronous reads:
+ROM bytes are stored in IndexedDB (no size limits), while metadata and save states use localStorage for fast synchronous reads. Each system has its own isolated storage:
 
-- `romStore.ts` / `nesRomStore.ts` — ROM library per system (IndexedDB for bytes, localStorage for metadata: name, size, timestamps, cover art)
-- `saveStateStore.ts` / `nesSaveStateStore.ts` — save state slots per system (GBA: base64-encoded binary, NES: JSON string)
+| System | ROM Store | Save State Store | IndexedDB Name |
+| --- | --- | --- | --- |
+| GBA | `romStore.ts` | `saveStateStore.ts` | `gba_rom_library` |
+| NES | `nesRomStore.ts` | `nesSaveStateStore.ts` | `nes_rom_library` |
+| DS | `dsRomStore.ts` | (managed by EmulatorJS) | `ds_rom_library` |
+
 - Each ROM is identified by a SHA-256 hash (first 16 hex chars) to deduplicate
+- GBA save states: base64-encoded binary in localStorage
+- NES save states: JSON-serialized emulator state in localStorage
+- DS save states: managed internally by EmulatorJS
 
 ## Tech Stack
 
@@ -87,6 +108,7 @@ ROM bytes are stored in IndexedDB (no size limits), while metadata and save stat
 - **UI:** React 19, Tailwind CSS 4
 - **GBA Emulation:** mGBA WASM (`@thenick775/mgba-wasm`)
 - **NES Emulation:** JSNES (`jsnes`)
+- **DS Emulation:** EmulatorJS + DeSmuME 2015 (loaded from CDN)
 - **Storage:** IndexedDB (ROM bytes), localStorage (save states, settings, keymaps, ROM metadata)
 - **Language:** TypeScript
 - **Fonts:** Geist Sans & Geist Mono (via `next/font`)
@@ -109,7 +131,8 @@ src/
 │   ├── page.tsx                # Home — system selection grid
 │   ├── globals.css             # Global styles & CSS variables
 │   ├── gba/page.tsx            # GBA emulator page
-│   └── nes/page.tsx            # NES emulator page
+│   ├── nes/page.tsx            # NES emulator page
+│   └── ds/page.tsx             # DS emulator page
 │
 ├── components/
 │   ├── SystemCard.tsx          # System card (image, status badge, link)
@@ -130,14 +153,20 @@ src/
 │   │   ├── TurboToastProvider.tsx  # Turbo change notification context
 │   │   └── ConfirmDialog.tsx   # Confirmation modal
 │   │
-│   └── nes/
-│       ├── NesPlayer.tsx       # NES emulator orchestrator
-│       ├── NesConsole.tsx      # Canvas wrapper (256×240, scanlines)
-│       ├── NesRomLibrary.tsx   # NES ROM list
-│       ├── NesRomDropzone.tsx  # NES drag-and-drop import
-│       ├── NesSettingsPanel.tsx    # NES settings drawer (save, keymap)
-│       ├── NesKeymapEditor.tsx # NES keyboard rebinding UI
-│       ├── MobileControls.tsx  # NES touch buttons (no shoulders)
+│   ├── nes/
+│   │   ├── NesPlayer.tsx       # NES emulator orchestrator
+│   │   ├── NesConsole.tsx      # Canvas wrapper (256×240, scanlines)
+│   │   ├── NesRomLibrary.tsx   # NES ROM list
+│   │   ├── NesRomDropzone.tsx  # NES drag-and-drop import
+│   │   ├── NesSettingsPanel.tsx    # NES settings drawer (save, keymap)
+│   │   ├── NesKeymapEditor.tsx # NES keyboard rebinding UI
+│   │   ├── MobileControls.tsx  # NES touch buttons (no shoulders)
+│   │   └── ConfirmDialog.tsx   # Confirmation modal
+│   │
+│   └── ds/
+│       ├── DsPlayer.tsx        # DS emulator (iframe + EmulatorJS)
+│       ├── DsRomLibrary.tsx    # DS ROM list
+│       ├── DsRomDropzone.tsx   # DS drag-and-drop import
 │       └── ConfirmDialog.tsx   # Confirmation modal
 │
 └── lib/
@@ -170,7 +199,8 @@ src/
         ├── romStore.ts             # GBA ROM library (IDB + localStorage)
         ├── saveStateStore.ts       # GBA save states (localStorage, base64)
         ├── nesRomStore.ts          # NES ROM library (IDB + localStorage)
-        └── nesSaveStateStore.ts    # NES save states (localStorage, JSON)
+        ├── nesSaveStateStore.ts    # NES save states (localStorage, JSON)
+        └── dsRomStore.ts           # DS ROM library (IDB + localStorage)
 
 public/
 ├── images/          # System card images

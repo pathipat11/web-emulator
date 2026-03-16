@@ -21,6 +21,11 @@ export interface GbaCore {
     saveState(slot: number): Promise<void>;
     loadState(slot: number): Promise<void>;
 
+    /** Get raw save-state bytes from the FS after saving */
+    saveStateBytes?(slot: number): Promise<Uint8Array | null>;
+    /** Write raw save-state bytes to the FS then load */
+    loadStateBytes?(slot: number, bytes: Uint8Array): Promise<void>;
+
     setAudioEnabled?(enabled: boolean): void;
 
     /** ✅ Turbo: 1x / 2x / 4x */
@@ -98,6 +103,7 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
     let Module: any = null;
 
     let audioOn = true;
+    let currentRomPath = "";
 
     // ✅ turbo state
     let turboRate: TurboRate = 1;
@@ -153,6 +159,7 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
                 // ignore
             }
             const romPath = `/roms/${fileName}`;
+            currentRomPath = romPath;
             Module.FS.writeFile(romPath, romBytes);
             Module.loadGame(romPath, null);
 
@@ -219,7 +226,6 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
         async saveState(slot: number) {
             if (!Module) return;
             Module.saveState?.(slot);
-            Module.FSSync?.();
         },
 
         async loadState(slot: number) {
@@ -228,6 +234,114 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
 
             // ✅ (optional) re-apply turbo after loadState (some builds reset speed)
             applyTurboToModule(Module, turboRate);
+        },
+
+        async saveStateBytes(slot: number): Promise<Uint8Array | null> {
+            if (!Module) return null;
+            try {
+                // Snapshot files in /data/states/ BEFORE saving
+                let statesBefore: string[] = [];
+                try {
+                    statesBefore = Module.FS.readdir("/data/states").filter((f: string) => f !== "." && f !== "..");
+                } catch { /* dir may not exist yet */ }
+
+                Module.saveState?.(slot);
+
+                // Wait for FS to sync
+                await new Promise<void>((resolve) => {
+                    try {
+                        if (typeof Module.FSSync === "function") {
+                            const result = Module.FSSync(resolve);
+                            if (result && typeof result.then === "function") {
+                                result.then(resolve).catch(() => resolve());
+                                return;
+                            }
+                        }
+                    } catch { /* ignore */ }
+                    setTimeout(resolve, 150);
+                });
+
+                // Check /data/states/ for new or updated files
+                try {
+                    const statesAfter: string[] = Module.FS.readdir("/data/states").filter((f: string) => f !== "." && f !== "..");
+                    console.log("[mGBA] /data/states/ files:", statesAfter);
+
+                    // Try new files first (files that appeared after save)
+                    const newFiles = statesAfter.filter((f: string) => !statesBefore.includes(f));
+                    const allCandidates = [...newFiles, ...statesAfter];
+
+                    for (const f of allCandidates) {
+                        try {
+                            const data: Uint8Array = Module.FS.readFile(`/data/states/${f}`);
+                            if (data && data.length > 0) {
+                                console.log("[mGBA] saveStateBytes: found at /data/states/" + f, "size:", data.length);
+                                return data;
+                            }
+                        } catch { /* skip */ }
+                    }
+                } catch { /* /data/states doesn't exist */ }
+
+                // Also try classic path patterns
+                const baseName = currentRomPath.replace(/\.gba$/i, "");
+                const romFileName = currentRomPath.split("/").pop() ?? "";
+                const romBaseName = romFileName.replace(/\.gba$/i, "");
+                const candidates = [
+                    `${currentRomPath}.ss${slot}`,
+                    `${baseName}.ss${slot}`,
+                    `/data/states/${romFileName}.ss${slot}`,
+                    `/data/states/${romBaseName}.ss${slot}`,
+                ];
+
+                for (const p of candidates) {
+                    try {
+                        const data: Uint8Array = Module.FS.readFile(p);
+                        if (data && data.length > 0) {
+                            console.log("[mGBA] saveStateBytes: found at", p, "size:", data.length);
+                            return data;
+                        }
+                    } catch { /* try next */ }
+                }
+
+                console.warn("[mGBA] saveStateBytes: state file not found for slot", slot);
+                return null;
+            } catch (e) {
+                console.error("[mGBA] saveStateBytes error:", e);
+                return null;
+            }
+        },
+
+        async loadStateBytes(slot: number, bytes: Uint8Array): Promise<void> {
+            if (!Module) return;
+            try {
+                // Ensure /data/states exists
+                try { Module.FS.mkdir("/data"); } catch { /* exists */ }
+                try { Module.FS.mkdir("/data/states"); } catch { /* exists */ }
+
+                // Find the actual state file path mGBA uses by scanning /data/states/
+                let targetPath = "";
+                try {
+                    const files: string[] = Module.FS.readdir("/data/states").filter((f: string) => f !== "." && f !== "..");
+                    const match = files.find((f: string) => f.endsWith(`.ss${slot}`));
+                    if (match) {
+                        targetPath = `/data/states/${match}`;
+                    }
+                } catch { /* dir doesn't exist */ }
+
+                // If no existing file found, construct from ROM path as fallback
+                if (!targetPath) {
+                    const romBaseName = (currentRomPath.split("/").pop() ?? "").replace(/\.gba$/i, "");
+                    targetPath = `/data/states/${romBaseName}.ss${slot}`;
+                }
+
+                Module.FS.writeFile(targetPath, bytes);
+                console.log("[mGBA] loadStateBytes: wrote", bytes.length, "bytes to", targetPath);
+
+                Module.loadState?.(slot);
+                console.log("[mGBA] loadStateBytes: called loadState slot", slot);
+                applyTurboToModule(Module, turboRate);
+            } catch (e) {
+                console.error("[mGBA] loadStateBytes failed:", e);
+            }
         },
     };
 

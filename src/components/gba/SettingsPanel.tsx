@@ -1,7 +1,9 @@
 "use client";
 
+import { useRef } from "react";
 import { KeymapEditor } from "@/components/gba/KeymapEditor";
 import type { Slot } from "@/lib/storage/saveStateStore";
+import { hasSaveState } from "@/lib/storage/saveStateStore";
 import { TurboRate } from "@/lib/gba/core-adapter";
 import type { GbaButton } from "@/lib/input";
 import type { Keymap } from "@/lib/hooks/useKeymap";
@@ -11,8 +13,12 @@ export function SettingsPanel({
     open,
     onClose,
     canInteract,
+    romHash,
+    saveVersion,
     onSave,
     onLoad,
+    onExportSave,
+    onImportSave,
 
     turbo,
     setTurbo,
@@ -31,8 +37,12 @@ export function SettingsPanel({
     onClose: () => void;
 
     canInteract: boolean;
+    romHash: string;
+    saveVersion: number;
     onSave: (s: Slot) => void;
     onLoad: (s: Slot) => void;
+    onExportSave: (s: Slot) => void;
+    onImportSave: (s: Slot, file: File) => void;
 
     turbo: TurboRate;
     setTurbo: (t: TurboRate) => void;
@@ -46,6 +56,9 @@ export function SettingsPanel({
     onSetKey: (code: string, button: GbaButton) => void;
     onResetKeymap: () => void;
 }) {
+    const importRefs = useRef<Record<number, HTMLInputElement | null>>({});
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _v = saveVersion; // used to trigger re-render so hasSaveState picks up changes
     if (!show) return null;
 
     return (
@@ -137,32 +150,67 @@ export function SettingsPanel({
                 <div className="mt-6">
                     <div className="text-base font-semibold">Save / Load</div>
                     <div className="mt-3 space-y-2">
-                        {([1, 2, 3] as const).map((s) => (
-                            <div
-                                key={s}
-                                className="flex items-center justify-between rounded-2xl border border-(--border) bg-(--panel) p-3"
-                            >
-                                <div className="font-medium">Slot {s}</div>
-                                <div className="flex gap-2">
-                                    <button
-                                        onClick={() => onSave(s)}
-                                        className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 bg-(--accent)"
-                                        disabled={!canInteract}
-                                        type="button"
-                                    >
-                                        Save
-                                    </button>
-                                    <button
-                                        onClick={() => onLoad(s)}
-                                        className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50"
-                                        disabled={!canInteract}
-                                        type="button"
-                                    >
-                                        Load
-                                    </button>
+                        {([1, 2, 3] as const).map((s) => {
+                            const has = !!romHash && hasSaveState(romHash, s);
+                            return (
+                                <div
+                                    key={s}
+                                    className="rounded-2xl border border-(--border) bg-(--panel) p-3"
+                                >
+                                    <div className="flex items-center justify-between">
+                                        <div className="font-medium">Slot {s}</div>
+                                        <span className={["text-xs", has ? "text-green-500" : "text-(--muted)"].join(" ")}>
+                                            {has ? "● Has data" : "○ Empty"}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => onSave(s)}
+                                            className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 bg-(--accent)"
+                                            disabled={!canInteract}
+                                            type="button"
+                                        >
+                                            Save
+                                        </button>
+                                        <button
+                                            onClick={() => onLoad(s)}
+                                            className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50"
+                                            disabled={!canInteract}
+                                            type="button"
+                                        >
+                                            Load
+                                        </button>
+                                        <button
+                                            onClick={() => onExportSave(s)}
+                                            className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50"
+                                            disabled={!has}
+                                            type="button"
+                                        >
+                                            ↓ Export .sav
+                                        </button>
+                                        <button
+                                            onClick={() => importRefs.current[s]?.click()}
+                                            className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50"
+                                            disabled={!romHash}
+                                            type="button"
+                                        >
+                                            ↑ Import .sav
+                                        </button>
+                                        <input
+                                            ref={(el) => { importRefs.current[s] = el; }}
+                                            type="file"
+                                            accept=".sav,.savestate,.state"
+                                            className="hidden"
+                                            onChange={(e) => {
+                                                const file = e.target.files?.[0];
+                                                if (file) onImportSave(s, file);
+                                                e.target.value = "";
+                                            }}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 

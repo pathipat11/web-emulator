@@ -51,6 +51,7 @@ export default function GbaPlayer() {
     const [showSettings, setShowSettings] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
+    const [saveVersion, setSaveVersion] = useState(0);
 
     // audio
     const [audioEnabled, setAudioEnabled] = useState(true);
@@ -126,6 +127,7 @@ export default function GbaPlayer() {
         enabled: autoSaveEnabled && status !== "idle",
         slot: autoSaveSlot,
         setMessage,
+        onSaveVersion: () => setSaveVersion((v) => v + 1),
     });
 
     async function onUpload(file: File | null) {
@@ -306,20 +308,77 @@ export default function GbaPlayer() {
         }
 
         try {
-            // use bytes API if available (preferred)
+            const { putSaveState, putMeta } = await import("@/lib/storage/saveStateStore");
+
             if (typeof c.saveStateBytes === "function") {
-                const bytes: Uint8Array = await c.saveStateBytes(slot);
-                const { putSaveState, putMeta } = await import("@/lib/storage/saveStateStore");
-                putSaveState(romHashState, slot, bytes);
-                putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+                const bytes: Uint8Array | null = await c.saveStateBytes(slot);
+                if (bytes && bytes.length > 0) {
+                    putSaveState(romHashState, slot, bytes);
+                    putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+                    setMessage(`Saved state to slot ${slot} (${bytes.length.toLocaleString()} bytes).`);
+                } else {
+                    // mGBA saved internally but we couldn't extract bytes from FS
+                    // Still call saveState so the emulator has it, just can't export
+                    await c.saveState(slot);
+                    setMessage(`Saved state to slot ${slot} (internal only — export unavailable).`);
+                }
             } else {
-                // fallback: use core's internal save
                 await c.saveState(slot);
+                setMessage(`Saved state to slot ${slot}.`);
             }
-            setMessage(`Saved state to slot ${slot}.`);
+
+            setSaveVersion((v) => v + 1);
         } catch (err: any) {
             console.error(err);
             setMessage(`Save failed: ${err?.message ?? String(err)}`);
+        }
+    }
+
+    async function onExportSave(slot: Slot) {
+        if (!romHashState) {
+            setMessage("Load a ROM first.");
+            return;
+        }
+        const { getSaveState } = await import("@/lib/storage/saveStateStore");
+        const bytes = getSaveState(romHashState, slot);
+        if (!bytes) {
+            setMessage(`No save data in slot ${slot}.`);
+            return;
+        }
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "application/octet-stream" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${romName.replace(/\.[^/.]+$/, "")}_slot${slot}.sav`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setMessage(`Exported save slot ${slot}.`);
+    }
+
+    async function onImportSave(slot: Slot, file: File) {
+        if (!romHashState) {
+            setMessage("Load a ROM first.");
+            return;
+        }
+        const buf = await file.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        const { putSaveState, putMeta } = await import("@/lib/storage/saveStateStore");
+        putSaveState(romHashState, slot, bytes);
+        putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+        setSaveVersion((v) => v + 1);
+
+        // Also load the imported state into the running emulator
+        const c: any = coreRef.current;
+        if (c && status !== "idle" && typeof c.loadStateBytes === "function") {
+            try {
+                await c.loadStateBytes(slot, bytes);
+                c.setAudioEnabled?.(audioEnabledRef.current);
+                setMessage(`Imported & loaded save slot ${slot}.`);
+            } catch {
+                setMessage(`Imported save to slot ${slot} (load manually via Load button).`);
+            }
+        } else {
+            setMessage(`Imported save to slot ${slot} (${bytes.length.toLocaleString()} bytes).`);
         }
     }
 
@@ -332,20 +391,20 @@ export default function GbaPlayer() {
         }
 
         try {
-            // load bytes from localStorage if core supports it
+            // Try loading from localStorage first (our portable save)
             if (typeof c.loadStateBytes === "function") {
                 const { getSaveState } = await import("@/lib/storage/saveStateStore");
                 const bytes = getSaveState(romHashState, slot);
-                if (!bytes) {
-                    setMessage(`No save data in slot ${slot}.`);
+                if (bytes) {
+                    await c.loadStateBytes(slot, bytes);
+                    setMessage(`Loaded state from slot ${slot}.`);
+                    c.setAudioEnabled?.(audioEnabledRef.current);
                     return;
                 }
-                await c.loadStateBytes(slot, bytes);
-            } else {
-                // fallback to core's internal load
-                await c.loadState(slot);
             }
 
+            // Fallback: use mGBA's internal load (works if saved via Module.saveState)
+            await c.loadState(slot);
             setMessage(`Loaded state from slot ${slot}.`);
             c.setAudioEnabled?.(audioEnabledRef.current);
         } catch (err: any) {
@@ -559,8 +618,12 @@ export default function GbaPlayer() {
                 open={settingsOpen}
                 onClose={closeSettings}
                 canInteract={canInteract}
+                romHash={romHashState}
+                saveVersion={saveVersion}
                 onSave={onSave}
                 onLoad={onLoad}
+                onExportSave={onExportSave}
+                onImportSave={onImportSave}
                 turbo={turbo as TurboRate}
                 setTurbo={setTurbo}
                 autoSaveEnabled={autoSaveEnabled}

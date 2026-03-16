@@ -188,7 +188,7 @@ export default function DsPlayer() {
                     <div
                         className="relative w-full overflow-hidden rounded-2xl bg-black"
                         style={{
-                            aspectRatio: "256 / 384",
+                            aspectRatio: "3 / 4",
                             boxShadow: `0 0 0 1px rgba(255,255,255,.06), 0 0 24px var(--screen-glow)`,
                         }}
                     >

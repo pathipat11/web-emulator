@@ -6,6 +6,7 @@ import { createJsnesCore, type NesCore } from "@/lib/nes/core-adapter";
 import { useNesKeyboardInput } from "@/lib/hooks/useNesKeyboardInput";
 import { useNesGamepadInput } from "@/lib/hooks/useNesGamepadInput";
 import { useNesKeymap } from "@/lib/hooks/useNesKeymap";
+import { useNesAutoSaveOnClose } from "@/lib/hooks/useNesAutoSaveOnClose";
 import type { NesButton } from "@/lib/nes/input";
 import type { Slot } from "@/lib/storage/nesSaveStateStore";
 
@@ -61,6 +62,10 @@ export default function NesPlayer() {
     const [audioEnabled, setAudioEnabled] = useState(true);
     const audioEnabledRef = useRef(true);
 
+    const [autoSaveEnabled, setAutoSaveEnabled] = useState(true);
+    const [autoSaveSlot, setAutoSaveSlot] = useState<Slot>(1);
+    const [saveVersion, setSaveVersion] = useState(0);
+
     useEffect(() => {
         audioEnabledRef.current = audioEnabled;
         coreRef.current?.setAudioEnabled?.(audioEnabled);
@@ -70,6 +75,16 @@ export default function NesPlayer() {
 
     useNesKeyboardInput(coreRef, keymap);
     useNesGamepadInput(coreRef, setGamepadInfo);
+
+    useNesAutoSaveOnClose({
+        coreRef,
+        romHash: romHashState,
+        romName,
+        enabled: autoSaveEnabled,
+        slot: autoSaveSlot,
+        setMessage,
+        onSaveVersion: () => setSaveVersion((v) => v + 1),
+    });
 
     // init core
     useEffect(() => {
@@ -201,6 +216,7 @@ export default function NesPlayer() {
         if (!data) { setMessage("Save failed."); return; }
         putNesSaveState(romHashState, slot, data);
         putNesMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+        setSaveVersion((v) => v + 1);
         setMessage(`Saved state to slot ${slot}.`);
     }
 
@@ -210,6 +226,34 @@ export default function NesPlayer() {
         if (!data) { setMessage(`No save data in slot ${slot}.`); return; }
         coreRef.current.loadState(data);
         setMessage(`Loaded state from slot ${slot}.`);
+    }
+
+    function onExportSave(slot: Slot) {
+        if (!romHashState) return;
+        const data = getNesSaveState(romHashState, slot);
+        if (!data) { setMessage(`No save data in slot ${slot}.`); return; }
+        const blob = new Blob([data], { type: "application/json" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${romName.replace(/\.[^/.]+$/, "")}_slot${slot}.sav`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        setMessage(`Exported slot ${slot}.`);
+    }
+
+    async function onImportSave(slot: Slot, file: File) {
+        if (!romHashState) return;
+        try {
+            const text = await file.text();
+            // Validate it's parseable JSON (NES saves are JSON-serialized)
+            JSON.parse(text);
+            putNesSaveState(romHashState, slot, text);
+            putNesMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+            setSaveVersion((v) => v + 1);
+            setMessage(`Imported save to slot ${slot}.`);
+        } catch {
+            setMessage("Import failed — invalid save file.");
+        }
     }
 
     function onFullscreen() { canvasRef.current?.requestFullscreen?.(); }
@@ -317,7 +361,7 @@ export default function NesPlayer() {
 
             {tab === "library" && <NesRomLibrary onPlay={loadRomFromLibrary} />}
 
-            <NesSettingsPanel show={showSettings} open={settingsOpen} onClose={closeSettings} canInteract={canInteract} onSave={onSave} onLoad={onLoad} keymap={keymap} onSetKey={setKeymapKey} onResetKeymap={resetKeymap} />
+            <NesSettingsPanel show={showSettings} open={settingsOpen} onClose={closeSettings} canInteract={canInteract} romHash={romHashState} saveVersion={saveVersion} onSave={onSave} onLoad={onLoad} onExportSave={onExportSave} onImportSave={onImportSave} autoSaveEnabled={autoSaveEnabled} setAutoSaveEnabled={setAutoSaveEnabled} autoSaveSlot={autoSaveSlot} setAutoSaveSlot={setAutoSaveSlot} keymap={keymap} onSetKey={setKeymapKey} onResetKeymap={resetKeymap} />
 
             <ConfirmDialog open={showEjectConfirm} title="Eject ROM" message={`Remove "${romName}" from the emulator? Your save states in the library are kept.`} confirmLabel="Eject" danger onConfirm={() => { setShowEjectConfirm(false); onEject(); }} onCancel={() => setShowEjectConfirm(false)} />
         </div>

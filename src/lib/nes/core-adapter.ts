@@ -59,10 +59,10 @@ export function createJsnesCore(): NesCore {
         const data = imageData.data;
         for (let i = 0; i < 256 * 240; i++) {
             const pixel = frameBuffer[i];
-            data[i * 4 + 0] = (pixel >> 16) & 0xff; // R
-            data[i * 4 + 1] = (pixel >> 8) & 0xff;  // G
-            data[i * 4 + 2] = pixel & 0xff;          // B
-            data[i * 4 + 3] = 0xff;                  // A
+            data[i * 4 + 0] = pixel & 0xff;          // R
+            data[i * 4 + 1] = (pixel >> 8) & 0xff;   // G
+            data[i * 4 + 2] = (pixel >> 16) & 0xff;  // B
+            data[i * 4 + 3] = 0xff;                   // A
         }
         ctx.putImageData(imageData, 0, 0);
     }
@@ -94,17 +94,30 @@ export function createJsnesCore(): NesCore {
         }
     }
 
+    const TARGET_FPS = 60;
+    const FRAME_MS = 1000 / TARGET_FPS;
+    let lastFrameTime = 0;
+
     function startLoop() {
         if (rafId !== null) return;
-        const tick = () => {
+        lastFrameTime = performance.now();
+        const tick = (now: number) => {
             if (nes && core.status === "running") {
-                try {
-                    nes.frame();
-                } catch (e) {
-                    console.error("[NES] frame error:", e);
-                    core.status = "paused";
-                    stopLoop();
-                    return;
+                const elapsed = now - lastFrameTime;
+                if (elapsed >= FRAME_MS) {
+                    // Catch up but cap to avoid spiral-of-death on tab refocus
+                    const frames = Math.min(Math.floor(elapsed / FRAME_MS), 4);
+                    for (let i = 0; i < frames; i++) {
+                        try {
+                            nes.frame();
+                        } catch (e) {
+                            console.error("[NES] frame error:", e);
+                            core.status = "paused";
+                            stopLoop();
+                            return;
+                        }
+                    }
+                    lastFrameTime = now - (elapsed % FRAME_MS);
                 }
             }
             rafId = requestAnimationFrame(tick);

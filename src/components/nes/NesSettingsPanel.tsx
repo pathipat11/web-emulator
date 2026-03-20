@@ -1,7 +1,9 @@
 "use client";
 
+import { useRef } from "react";
 import { NesKeymapEditor } from "@/components/nes/NesKeymapEditor";
 import type { Slot } from "@/lib/storage/nesSaveStateStore";
+import { hasNesSaveState } from "@/lib/storage/nesSaveStateStore";
 import type { NesButton } from "@/lib/nes/input";
 import type { NesKeymap } from "@/lib/hooks/useNesKeymap";
 
@@ -10,8 +12,16 @@ export function NesSettingsPanel({
     open,
     onClose,
     canInteract,
+    romHash,
+    saveVersion,
     onSave,
     onLoad,
+    onExportSave,
+    onImportSave,
+    autoSaveEnabled,
+    setAutoSaveEnabled,
+    autoSaveSlot,
+    setAutoSaveSlot,
     keymap,
     onSetKey,
     onResetKeymap,
@@ -20,12 +30,23 @@ export function NesSettingsPanel({
     open: boolean;
     onClose: () => void;
     canInteract: boolean;
+    romHash: string;
+    saveVersion: number;
     onSave: (s: Slot) => void;
     onLoad: (s: Slot) => void;
+    onExportSave: (s: Slot) => void;
+    onImportSave: (s: Slot, file: File) => void;
+    autoSaveEnabled: boolean;
+    setAutoSaveEnabled: (v: boolean) => void;
+    autoSaveSlot: Slot;
+    setAutoSaveSlot: (s: Slot) => void;
     keymap: NesKeymap;
     onSetKey: (code: string, button: NesButton) => void;
     onResetKeymap: () => void;
 }) {
+    const importRefs = useRef<Record<number, HTMLInputElement | null>>({});
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const _v = saveVersion;
     if (!show) return null;
 
     return (
@@ -57,19 +78,51 @@ export function NesSettingsPanel({
                     • Mobile: touch overlay controls on screen
                 </div>
 
+                {/* Auto Save */}
+                <div className="mt-6">
+                    <div className="text-base font-semibold">Auto Save</div>
+                    <label className="mt-3 inline-flex items-center gap-2 rounded-xl border border-(--border) bg-(--panel) px-3 py-2">
+                        <input type="checkbox" className="h-4 w-4" checked={autoSaveEnabled} onChange={(e) => setAutoSaveEnabled(e.target.checked)} />
+                        <span className="text-sm">Auto save on page close</span>
+                    </label>
+                    <div className="mt-3 flex items-center gap-2">
+                        <span className="text-sm text-(--muted)">Slot</span>
+                        {([1, 2, 3] as const).map((s) => (
+                            <button key={s} type="button" onClick={() => setAutoSaveSlot(s)} disabled={!autoSaveEnabled}
+                                className={[
+                                    "rounded-xl px-3 py-2 text-sm border border-(--border) transition disabled:opacity-50",
+                                    s === autoSaveSlot ? "bg-(--accent) text-white" : "bg-(--panel) text-(--text)",
+                                ].join(" ")}
+                            >{s}</button>
+                        ))}
+                    </div>
+                </div>
+
                 {/* Save/Load */}
                 <div className="mt-6">
                     <div className="text-base font-semibold">Save / Load</div>
                     <div className="mt-3 space-y-2">
-                        {([1, 2, 3] as const).map((s) => (
-                            <div key={s} className="flex items-center justify-between rounded-2xl border border-(--border) bg-(--panel) p-3">
-                                <div className="font-medium">Slot {s}</div>
-                                <div className="flex gap-2">
-                                    <button onClick={() => onSave(s)} className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 bg-(--accent)" disabled={!canInteract} type="button">Save</button>
-                                    <button onClick={() => onLoad(s)} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!canInteract} type="button">Load</button>
+                        {([1, 2, 3] as const).map((s) => {
+                            const has = !!romHash && hasNesSaveState(romHash, s);
+                            return (
+                                <div key={s} className="rounded-2xl border border-(--border) bg-(--panel) p-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="font-medium">Slot {s}</div>
+                                        <span className={["text-xs", has ? "text-green-500" : "text-(--muted)"].join(" ")}>
+                                            {has ? "● Has data" : "○ Empty"}
+                                        </span>
+                                    </div>
+                                    <div className="mt-2 grid grid-cols-2 gap-2">
+                                        <button onClick={() => onSave(s)} className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 bg-(--accent)" disabled={!canInteract} type="button">Save</button>
+                                        <button onClick={() => onLoad(s)} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!canInteract} type="button">Load</button>
+                                        <button onClick={() => onExportSave(s)} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!has} type="button">↓ Export .sav</button>
+                                        <button onClick={() => importRefs.current[s]?.click()} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!romHash} type="button">↑ Import .sav</button>
+                                        <input ref={(el) => { importRefs.current[s] = el; }} type="file" accept=".sav,.savestate,.state,.json" className="hidden"
+                                            onChange={(e) => { const file = e.target.files?.[0]; if (file) onImportSave(s, file); e.target.value = ""; }} />
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
 

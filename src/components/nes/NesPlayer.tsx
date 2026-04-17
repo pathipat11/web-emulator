@@ -3,11 +3,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createJsnesCore, type NesCore } from "@/lib/nes/core-adapter";
-import { useNesKeyboardInput } from "@/lib/hooks/useNesKeyboardInput";
-import { useNesGamepadInput } from "@/lib/hooks/useNesGamepadInput";
-import { useNesKeymap } from "@/lib/hooks/useNesKeymap";
+import { useKeyboardInput } from "@/lib/hooks/useKeyboardInput";
+import { useGamepadInput } from "@/lib/hooks/useGamepadInput";
+import { useKeymap } from "@/lib/hooks/useKeymap";
 import { useNesAutoSaveOnClose } from "@/lib/hooks/useNesAutoSaveOnClose";
 import type { NesButton } from "@/lib/nes/input";
+import { defaultNesKeymap } from "@/lib/nes/input";
+import { defaultNesGamepadMapping } from "@/lib/nes/gamepad";
 import type { Slot } from "@/lib/storage/nesSaveStateStore";
 
 import ThemeToggle from "@/components/ThemeToggle";
@@ -30,16 +32,7 @@ import {
     getNesSaveState,
     putNesMeta,
 } from "@/lib/storage/nesSaveStateStore";
-
-async function hashRom(bytes: Uint8Array): Promise<string> {
-    const ab = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(ab).set(bytes);
-    const digest = await crypto.subtle.digest("SHA-256", ab);
-    return Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("")
-        .slice(0, 16);
-}
+import { hashRom } from "@/lib/hashRom";
 
 type Tab = "emulator" | "library";
 
@@ -71,10 +64,10 @@ export default function NesPlayer() {
         coreRef.current?.setAudioEnabled?.(audioEnabled);
     }, [audioEnabled]);
 
-    const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useNesKeymap();
+    const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap<NesButton>("nes:keymap", defaultNesKeymap);
 
-    useNesKeyboardInput(coreRef, keymap);
-    useNesGamepadInput(coreRef, setGamepadInfo);
+    useKeyboardInput(coreRef, keymap);
+    useGamepadInput(coreRef, defaultNesGamepadMapping, setGamepadInfo);
 
     useNesAutoSaveOnClose({
         coreRef,

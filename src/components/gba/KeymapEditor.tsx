@@ -36,7 +36,7 @@ function codeToLabel(code: string): string {
 }
 
 /** Find the key code currently bound to a button */
-function getCodeForButton(keymap: Keymap, button: GbaButton): string | null {
+function getCodeForButton(keymap: Keymap<GbaButton>, button: GbaButton): string | null {
     for (const [code, btn] of Object.entries(keymap)) {
         if (btn === button) return code;
     }
@@ -44,7 +44,7 @@ function getCodeForButton(keymap: Keymap, button: GbaButton): string | null {
 }
 
 type Props = {
-    keymap: Keymap;
+    keymap: Keymap<GbaButton>;
     onSetKey: (code: string, button: GbaButton) => void;
     onReset: () => void;
 };

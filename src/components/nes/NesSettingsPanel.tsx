@@ -5,7 +5,7 @@ import { NesKeymapEditor } from "@/components/nes/NesKeymapEditor";
 import type { Slot } from "@/lib/storage/nesSaveStateStore";
 import { hasNesSaveState } from "@/lib/storage/nesSaveStateStore";
 import type { NesButton } from "@/lib/nes/input";
-import type { NesKeymap } from "@/lib/hooks/useNesKeymap";
+import type { Keymap } from "@/lib/hooks/useKeymap";
 
 export function NesSettingsPanel({
     show,
@@ -40,7 +40,7 @@ export function NesSettingsPanel({
     setAutoSaveEnabled: (v: boolean) => void;
     autoSaveSlot: Slot;
     setAutoSaveSlot: (s: Slot) => void;
-    keymap: NesKeymap;
+    keymap: Keymap<NesButton>;
     onSetKey: (code: string, button: NesButton) => void;
     onResetKeymap: () => void;
 }) {

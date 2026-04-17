@@ -14,16 +14,7 @@ import {
     upsertDsRomEntry,
     putDsRomBytes,
 } from "@/lib/storage/dsRomStore";
-
-async function hashRom(bytes: Uint8Array): Promise<string> {
-    const ab = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(ab).set(bytes);
-    const digest = await crypto.subtle.digest("SHA-256", ab);
-    return Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("")
-        .slice(0, 16);
-}
+import { hashRom } from "@/lib/hashRom";
 
 function buildEmulatorHTML(romUrl: string, gameName: string): string {
     return `<!DOCTYPE html>

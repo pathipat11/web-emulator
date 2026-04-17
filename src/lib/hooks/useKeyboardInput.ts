@@ -1,28 +1,33 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { useEffect } from "react";
-import { defaultKeymap, type GbaButton } from "@/lib/input";
-import type { GbaCore } from "@/lib/gba/core-adapter";
+import type { EmulatorCore } from "@/lib/emulator-core";
 
-export function useKeyboardInput(
-    coreRef: React.RefObject<GbaCore | null>,
-    keymap?: Record<string, GbaButton>,
+const DPAD = new Set(["UP", "DOWN", "LEFT", "RIGHT"]);
+
+/**
+ * Generic keyboard input hook — works for any system.
+ *
+ * @param coreRef   ref to the emulator core
+ * @param keymap    current key→button mapping
+ */
+export function useKeyboardInput<B extends string>(
+    coreRef: React.RefObject<EmulatorCore | null>,
+    keymap: Record<string, B>,
 ) {
     useEffect(() => {
-        const map = keymap ?? defaultKeymap;
-
         const onKeyDown = (e: KeyboardEvent) => {
             const core = coreRef.current;
             if (!core) return;
-            const btn = map[e.code];
+            const btn = keymap[e.code];
             if (!btn) return;
-            if (btn === "UP" || btn === "DOWN" || btn === "LEFT" || btn === "RIGHT") e.preventDefault();
+            if (DPAD.has(btn)) e.preventDefault();
             core.press(btn);
         };
 
         const onKeyUp = (e: KeyboardEvent) => {
             const core = coreRef.current;
             if (!core) return;
-            const btn = map[e.code];
+            const btn = keymap[e.code];
             if (!btn) return;
             core.release(btn);
         };

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { NesButton } from "@/lib/nes/input";
-import type { NesKeymap } from "@/lib/hooks/useNesKeymap";
+import type { Keymap } from "@/lib/hooks/useKeymap";
 
 const BUTTONS: { button: NesButton; label: string }[] = [
     { button: "UP", label: "D-Pad Up" },
@@ -25,7 +25,7 @@ function codeToLabel(code: string): string {
     return code.replace(/([a-z])([A-Z])/g, "$1 $2");
 }
 
-function getCodeForButton(keymap: NesKeymap, button: NesButton): string | null {
+function getCodeForButton(keymap: Keymap<NesButton>, button: NesButton): string | null {
     for (const [code, btn] of Object.entries(keymap)) {
         if (btn === button) return code;
     }
@@ -33,7 +33,7 @@ function getCodeForButton(keymap: NesKeymap, button: NesButton): string | null {
 }
 
 type Props = {
-    keymap: NesKeymap;
+    keymap: Keymap<NesButton>;
     onSetKey: (code: string, button: NesButton) => void;
     onReset: () => void;
 };

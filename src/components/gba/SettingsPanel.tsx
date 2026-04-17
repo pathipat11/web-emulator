@@ -52,7 +52,7 @@ export function SettingsPanel({
     autoSaveSlot: Slot;
     setAutoSaveSlot: (s: Slot) => void;
 
-    keymap: Keymap;
+    keymap: Keymap<GbaButton>;
     onSetKey: (code: string, button: GbaButton) => void;
     onResetKeymap: () => void;
 }) {

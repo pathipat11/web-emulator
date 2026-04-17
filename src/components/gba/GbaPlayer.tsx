@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createMgbaWasmCore, type GbaCore } from "@/lib/gba/core-adapter";
 import { useKeyboardInput } from "@/lib/hooks/useKeyboardInput";
 import { useGamepadInput } from "@/lib/hooks/useGamepadInput";
+import { defaultGamepadMapping } from "@/lib/gamepad";
 import type { GbaButton } from "@/lib/input";
 
 import ThemeToggle from "@/components/ThemeToggle";
@@ -21,18 +22,10 @@ import { TurboRate } from "@/lib/gba/core-adapter";
 import { useTurboShortcuts } from "@/lib/hooks/useTurboShortcuts";
 import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
 import { useKeymap } from "@/lib/hooks/useKeymap";
+import { defaultKeymap } from "@/lib/input";
+import { hashRom } from "@/lib/hashRom";
 import type { Slot } from "@/lib/storage/saveStateStore";
 import { getRomBytes, touchLastPlayed, setCoverArt, upsertRomEntry, putRomBytes } from "@/lib/storage/romStore";
-
-async function hashRom(bytes: Uint8Array): Promise<string> {
-    const ab = new ArrayBuffer(bytes.byteLength);
-    new Uint8Array(ab).set(bytes);
-    const digest = await crypto.subtle.digest("SHA-256", ab);
-    const hex = Array.from(new Uint8Array(digest))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-    return hex.slice(0, 16);
-}
 
 type Tab = "emulator" | "library";
 
@@ -79,11 +72,11 @@ export default function GbaPlayer() {
     const [autoLoadOnRom, setAutoLoadOnRom] = useState(true);
 
     // keymap (remappable)
-    const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap();
+    const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap<GbaButton>("gba:keymap", defaultKeymap);
 
     // inputs
     useKeyboardInput(coreRef, keymap);
-    useGamepadInput(coreRef, setGamepadInfo);
+    useGamepadInput(coreRef, defaultGamepadMapping, setGamepadInfo);
 
     // init core + canvas
     useEffect(() => {

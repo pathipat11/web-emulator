@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { KeymapEditor } from "@/components/gba/KeymapEditor";
 import type { Slot } from "@/lib/storage/saveStateStore";
 import { hasSaveState } from "@/lib/storage/saveStateStore";
@@ -57,8 +57,26 @@ export function SettingsPanel({
     onResetKeymap: () => void;
 }) {
     const importRefs = useRef<Record<number, HTMLInputElement | null>>({});
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _v = saveVersion; // used to trigger re-render so hasSaveState picks up changes
+    const [slotStatus, setSlotStatus] = useState<Record<number, boolean>>({});
+
+    useEffect(() => {
+        if (!show || !romHash) {
+            setSlotStatus({});
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            const results: Record<number, boolean> = {};
+            for (const s of [1, 2, 3] as Slot[]) {
+                results[s] = await hasSaveState(romHash, s);
+            }
+            if (!cancelled) setSlotStatus(results);
+        })();
+        return () => { cancelled = true; };
+        // saveVersion triggers re-check when saves change
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [show, romHash, saveVersion]);
+
     if (!show) return null;
 
     return (
@@ -151,7 +169,7 @@ export function SettingsPanel({
                     <div className="text-base font-semibold">Save / Load</div>
                     <div className="mt-3 space-y-2">
                         {([1, 2, 3] as const).map((s) => {
-                            const has = !!romHash && hasSaveState(romHash, s);
+                            const has = !!romHash && !!slotStatus[s];
                             return (
                                 <div
                                     key={s}

@@ -1,14 +1,11 @@
+/**
+ * GBA Save State Store — IndexedDB backed
+ *
+ * Migrated from localStorage to IndexedDB to avoid the ~5-10 MB origin limit.
+ * All public helpers are now async (returns Promises).
+ */
+
 export type Slot = 1 | 2 | 3;
-
-const KEY_PREFIX = "gba";
-
-function key(romHash: string, slot: Slot) {
-    return `${KEY_PREFIX}:state:${romHash}:slot:${slot}`;
-}
-
-function metaKey(romHash: string) {
-    return `${KEY_PREFIX}:meta:${romHash}`;
-}
 
 export type SaveMeta = {
     romHash: string;
@@ -17,35 +14,97 @@ export type SaveMeta = {
     lastSlot?: Slot;
 };
 
-export function putSaveState(romHash: string, slot: Slot, bytes: Uint8Array) {
-    const b64 = btoa(String.fromCharCode(...bytes));
-    localStorage.setItem(key(romHash, slot), b64);
+const DB_NAME = "gba_save_states";
+const DB_VERSION = 1;
+const STATE_STORE = "states"; // key = "romHash:slot"
+const META_STORE = "meta";    // key = romHash
+
+function openDB(): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = () => {
+            const db = req.result;
+            if (!db.objectStoreNames.contains(STATE_STORE)) {
+                db.createObjectStore(STATE_STORE);
+            }
+            if (!db.objectStoreNames.contains(META_STORE)) {
+                db.createObjectStore(META_STORE);
+            }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
 }
 
-export function getSaveState(romHash: string, slot: Slot): Uint8Array | null {
-    const b64 = localStorage.getItem(key(romHash, slot));
-    if (!b64) return null;
-
-    const bin = atob(b64);
-    const out = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-    return out;
+function stateKey(romHash: string, slot: Slot): string {
+    return `${romHash}:${slot}`;
 }
 
-export function hasSaveState(romHash: string, slot: Slot) {
-    return localStorage.getItem(key(romHash, slot)) != null;
+export async function putSaveState(romHash: string, slot: Slot, bytes: Uint8Array): Promise<void> {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STATE_STORE, "readwrite");
+        tx.objectStore(STATE_STORE).put(bytes.buffer, stateKey(romHash, slot));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+    db.close();
 }
 
-export function putMeta(meta: SaveMeta) {
-    localStorage.setItem(metaKey(meta.romHash), JSON.stringify(meta));
+export async function getSaveState(romHash: string, slot: Slot): Promise<Uint8Array | null> {
+    const db = await openDB();
+    const result = await new Promise<ArrayBuffer | null>((resolve, reject) => {
+        const tx = db.transaction(STATE_STORE, "readonly");
+        const req = tx.objectStore(STATE_STORE).get(stateKey(romHash, slot));
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return result ? new Uint8Array(result) : null;
 }
 
-export function getMeta(romHash: string): SaveMeta | null {
-    const raw = localStorage.getItem(metaKey(romHash));
-    if (!raw) return null;
-    try {
-        return JSON.parse(raw) as SaveMeta;
-    } catch {
-        return null;
-    }
+export async function hasSaveState(romHash: string, slot: Slot): Promise<boolean> {
+    const db = await openDB();
+    const result = await new Promise<number>((resolve, reject) => {
+        const tx = db.transaction(STATE_STORE, "readonly");
+        const req = tx.objectStore(STATE_STORE).count(IDBKeyRange.only(stateKey(romHash, slot)));
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return result > 0;
+}
+
+export async function deleteSaveState(romHash: string, slot: Slot): Promise<void> {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STATE_STORE, "readwrite");
+        tx.objectStore(STATE_STORE).delete(stateKey(romHash, slot));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+}
+
+export async function putMeta(meta: SaveMeta): Promise<void> {
+    const db = await openDB();
+    await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(META_STORE, "readwrite");
+        tx.objectStore(META_STORE).put(meta, meta.romHash);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
+    db.close();
+}
+
+export async function getMeta(romHash: string): Promise<SaveMeta | null> {
+    const db = await openDB();
+    const result = await new Promise<SaveMeta | null>((resolve, reject) => {
+        const tx = db.transaction(META_STORE, "readonly");
+        const req = tx.objectStore(META_STORE).get(romHash);
+        req.onsuccess = () => resolve(req.result ?? null);
+        req.onerror = () => reject(req.error);
+    });
+    db.close();
+    return result;
 }

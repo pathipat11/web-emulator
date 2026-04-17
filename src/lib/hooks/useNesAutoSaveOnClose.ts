@@ -25,7 +25,7 @@ export function useNesAutoSaveOnClose({
 }) {
     const savingRef = useRef(false);
 
-    const doSave = useCallback(() => {
+    const doSave = useCallback(async () => {
         if (savingRef.current || !romHash) return;
         savingRef.current = true;
         try {
@@ -34,9 +34,9 @@ export function useNesAutoSaveOnClose({
             const data = c.saveState();
             if (!data) return;
 
-            const { putNesSaveState, putNesMeta } = require("@/lib/storage/nesSaveStateStore");
-            putNesSaveState(romHash, slot, data);
-            putNesMeta({ romHash, romName, updatedAt: Date.now(), lastSlot: slot });
+            const { putNesSaveState, putNesMeta } = await import("@/lib/storage/nesSaveStateStore");
+            await putNesSaveState(romHash, slot, data);
+            await putNesMeta({ romHash, romName, updatedAt: Date.now(), lastSlot: slot });
             onSaveVersion?.();
             setMessage?.(`Auto-saved to slot ${slot}.`);
         } catch {

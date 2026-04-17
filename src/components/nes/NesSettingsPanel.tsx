@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { NesKeymapEditor } from "@/components/nes/NesKeymapEditor";
 import type { Slot } from "@/lib/storage/nesSaveStateStore";
 import { hasNesSaveState } from "@/lib/storage/nesSaveStateStore";
@@ -45,8 +45,25 @@ export function NesSettingsPanel({
     onResetKeymap: () => void;
 }) {
     const importRefs = useRef<Record<number, HTMLInputElement | null>>({});
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const _v = saveVersion;
+    const [slotStatus, setSlotStatus] = useState<Record<number, boolean>>({});
+
+    useEffect(() => {
+        if (!show || !romHash) {
+            setSlotStatus({});
+            return;
+        }
+        let cancelled = false;
+        (async () => {
+            const results: Record<number, boolean> = {};
+            for (const s of [1, 2, 3] as Slot[]) {
+                results[s] = await hasNesSaveState(romHash, s);
+            }
+            if (!cancelled) setSlotStatus(results);
+        })();
+        return () => { cancelled = true; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [show, romHash, saveVersion]);
+
     if (!show) return null;
 
     return (
@@ -103,7 +120,7 @@ export function NesSettingsPanel({
                     <div className="text-base font-semibold">Save / Load</div>
                     <div className="mt-3 space-y-2">
                         {([1, 2, 3] as const).map((s) => {
-                            const has = !!romHash && hasNesSaveState(romHash, s);
+                            const has = !!romHash && !!slotStatus[s];
                             return (
                                 <div key={s} className="rounded-2xl border border-(--border) bg-(--panel) p-3">
                                     <div className="flex items-center justify-between">

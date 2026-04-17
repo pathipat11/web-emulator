@@ -313,8 +313,8 @@ export default function GbaPlayer() {
             if (typeof c.saveStateBytes === "function") {
                 const bytes: Uint8Array | null = await c.saveStateBytes(slot);
                 if (bytes && bytes.length > 0) {
-                    putSaveState(romHashState, slot, bytes);
-                    putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+                    await putSaveState(romHashState, slot, bytes);
+                    await putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
                     setMessage(`Saved state to slot ${slot} (${bytes.length.toLocaleString()} bytes).`);
                 } else {
                     // mGBA saved internally but we couldn't extract bytes from FS
@@ -340,7 +340,7 @@ export default function GbaPlayer() {
             return;
         }
         const { getSaveState } = await import("@/lib/storage/saveStateStore");
-        const bytes = getSaveState(romHashState, slot);
+        const bytes = await getSaveState(romHashState, slot);
         if (!bytes) {
             setMessage(`No save data in slot ${slot}.`);
             return;
@@ -363,8 +363,8 @@ export default function GbaPlayer() {
         const buf = await file.arrayBuffer();
         const bytes = new Uint8Array(buf);
         const { putSaveState, putMeta } = await import("@/lib/storage/saveStateStore");
-        putSaveState(romHashState, slot, bytes);
-        putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+        await putSaveState(romHashState, slot, bytes);
+        await putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
         setSaveVersion((v) => v + 1);
 
         // Also load the imported state into the running emulator
@@ -391,10 +391,10 @@ export default function GbaPlayer() {
         }
 
         try {
-            // Try loading from localStorage first (our portable save)
+            // Try loading from IndexedDB first (our portable save)
             if (typeof c.loadStateBytes === "function") {
                 const { getSaveState } = await import("@/lib/storage/saveStateStore");
-                const bytes = getSaveState(romHashState, slot);
+                const bytes = await getSaveState(romHashState, slot);
                 if (bytes) {
                     await c.loadStateBytes(slot, bytes);
                     setMessage(`Loaded state from slot ${slot}.`);

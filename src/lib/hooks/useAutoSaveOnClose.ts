@@ -39,8 +39,8 @@ export function useAutoSaveOnClose({
                     const { putSaveState, putMeta } = await import(
                         "@/lib/storage/saveStateStore"
                     );
-                    putSaveState(romHash, slot, bytes);
-                    putMeta({
+                    await putSaveState(romHash, slot, bytes);
+                    await putMeta({
                         romHash,
                         romName: "",
                         updatedAt: Date.now(),

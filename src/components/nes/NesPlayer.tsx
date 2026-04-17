@@ -210,27 +210,27 @@ export default function NesPlayer() {
         }
     }
 
-    function onSave(slot: Slot) {
+    async function onSave(slot: Slot) {
         if (!coreRef.current || !romHashState) { setMessage("Load a ROM first."); return; }
         const data = coreRef.current.saveState();
         if (!data) { setMessage("Save failed."); return; }
-        putNesSaveState(romHashState, slot, data);
-        putNesMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+        await putNesSaveState(romHashState, slot, data);
+        await putNesMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
         setSaveVersion((v) => v + 1);
         setMessage(`Saved state to slot ${slot}.`);
     }
 
-    function onLoad(slot: Slot) {
+    async function onLoad(slot: Slot) {
         if (!coreRef.current || !romHashState) { setMessage("Load a ROM first."); return; }
-        const data = getNesSaveState(romHashState, slot);
+        const data = await getNesSaveState(romHashState, slot);
         if (!data) { setMessage(`No save data in slot ${slot}.`); return; }
         coreRef.current.loadState(data);
         setMessage(`Loaded state from slot ${slot}.`);
     }
 
-    function onExportSave(slot: Slot) {
+    async function onExportSave(slot: Slot) {
         if (!romHashState) return;
-        const data = getNesSaveState(romHashState, slot);
+        const data = await getNesSaveState(romHashState, slot);
         if (!data) { setMessage(`No save data in slot ${slot}.`); return; }
         const blob = new Blob([data], { type: "application/json" });
         const a = document.createElement("a");
@@ -247,8 +247,8 @@ export default function NesPlayer() {
             const text = await file.text();
             // Validate it's parseable JSON (NES saves are JSON-serialized)
             JSON.parse(text);
-            putNesSaveState(romHashState, slot, text);
-            putNesMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
+            await putNesSaveState(romHashState, slot, text);
+            await putNesMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
             setSaveVersion((v) => v + 1);
             setMessage(`Imported save to slot ${slot}.`);
         } catch {

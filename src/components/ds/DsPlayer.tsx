@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import ThemeToggle from "@/components/ThemeToggle";
 import { ConfirmDialog } from "@/components/ds/ConfirmDialog";
@@ -57,8 +57,21 @@ export default function DsPlayer() {
     const [iframeSrc, setIframeSrc] = useState<string | null>(null);
     const [message, setMessage] = useState("Upload a .nds ROM to begin. Emulation powered by EmulatorJS (DeSmuME).");
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
+    const [menuHidden, setMenuHidden] = useState(false);
 
     const status = iframeSrc ? "running" : "idle";
+
+    // F2 shortcut to toggle menu visibility
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "F2") {
+                e.preventDefault();
+                setMenuHidden((h) => !h);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
 
     function launchRom(romBytes: Uint8Array, name: string) {
         // Revoke previous blob URLs
@@ -132,9 +145,26 @@ export default function DsPlayer() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-5xl p-4 lg:p-6">
+        <div className={[
+            "mx-auto w-full max-w-5xl",
+            menuHidden ? "flex min-h-screen flex-col items-center justify-center" : "p-4 lg:p-6",
+        ].join(" ")}>
+            {/* Floating toggle button — always visible */}
+            <button
+                onClick={() => setMenuHidden((h) => !h)}
+                className="fixed right-4 top-4 z-30 rounded-full border bg-(--panel) border-(--border) px-3 py-1.5 text-xs shadow-md hover:-translate-y-px transition"
+                type="button"
+                aria-label={menuHidden ? "Show menu" : "Hide menu"}
+                title={`${menuHidden ? "Show" : "Hide"} menu (F2)`}
+            >
+                {menuHidden ? "☰ Show" : "✕ Hide"}
+            </button>
+
             {/* Header */}
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className={[
+                "mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between",
+                menuHidden ? "hidden" : "",
+            ].join(" ")}>
                 <div>
                     <div className="text-2xl font-bold tracking-tight">DS Emulator</div>
                     <div className="text-sm text-(--muted)">Upload .nds → Play in browser (EmulatorJS + DeSmuME)</div>
@@ -146,7 +176,10 @@ export default function DsPlayer() {
             </div>
 
             {/* Tab bar */}
-            <div className="mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1">
+            <div className={[
+                "mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1",
+                menuHidden ? "hidden" : "",
+            ].join(" ")}>
                 {(["emulator", "library"] as const).map((t) => (
                     <button key={t} onClick={() => setTab(t)} className={[
                         "flex-1 rounded-(--radius) px-4 py-2 text-sm font-medium transition",
@@ -158,9 +191,12 @@ export default function DsPlayer() {
             </div>
 
             {/* Emulator */}
-            <div className={tab !== "emulator" ? "hidden" : ""}>
+            <div className={tab !== "emulator" ? "hidden" : "w-full"}>
                 {/* Controls bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className={[
+                    "flex flex-wrap items-center justify-between gap-3",
+                    menuHidden ? "hidden" : "",
+                ].join(" ")}>
                     <div className="flex items-center gap-3">
                         <div className="text-sm font-medium text-(--text) truncate max-w-48">{romName !== "-" ? romName : "No ROM"}</div>
                         <div className={[
@@ -205,7 +241,10 @@ export default function DsPlayer() {
                 </div>
 
                 {/* Bottom row */}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className={[
+                    "mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                    menuHidden ? "hidden" : "",
+                ].join(" ")}>
                     <div className="text-sm text-(--muted)">{message}</div>
                     <label className="inline-flex items-center gap-2">
                         <input ref={fileInputRef} type="file" accept=".nds" className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)" onChange={(e) => { onUpload(e.target.files?.[0] ?? null); e.target.value = ""; }} />
@@ -213,7 +252,10 @@ export default function DsPlayer() {
                 </div>
 
                 {/* Info box */}
-                <div className="mt-4 rounded-2xl bg-(--panel) border border-(--border) p-4 text-sm text-(--muted)">
+                <div className={[
+                    "mt-4 rounded-2xl bg-(--panel) border border-(--border) p-4 text-sm text-(--muted)",
+                    menuHidden ? "hidden" : "",
+                ].join(" ")}>
                     <div className="font-medium text-(--text) mb-1">Controls</div>
                     EmulatorJS provides built-in controls: keyboard, gamepad, and on-screen touch buttons.
                     Use the emulator&apos;s own toolbar (inside the player) for save states, settings, and fullscreen.

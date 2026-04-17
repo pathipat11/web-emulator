@@ -45,6 +45,7 @@ export default function GbaPlayer() {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
     const [saveVersion, setSaveVersion] = useState(0);
+    const [menuHidden, setMenuHidden] = useState(false);
 
     // audio
     const [audioEnabled, setAudioEnabled] = useState(true);
@@ -446,6 +447,18 @@ export default function GbaPlayer() {
         return () => window.removeEventListener("keydown", onKeyDown);
     }, [showSettings]);
 
+    // F2 shortcut to toggle menu visibility
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "F2") {
+                e.preventDefault();
+                setMenuHidden((h) => !h);
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, []);
+
     function press(btn: GbaButton) {
         coreRef.current?.press(btn);
     }
@@ -454,9 +467,26 @@ export default function GbaPlayer() {
     }
 
     return (
-        <div className="mx-auto w-full max-w-5xl p-4 lg:p-6">
+        <div className={[
+            "mx-auto w-full max-w-5xl",
+            menuHidden ? "flex min-h-screen flex-col items-center justify-center" : "p-4 lg:p-6",
+        ].join(" ")}>
+            {/* Floating toggle button — always visible */}
+            <button
+                onClick={() => setMenuHidden((h) => !h)}
+                className="fixed right-4 top-4 z-30 rounded-full border bg-(--panel) border-(--border) px-3 py-1.5 text-xs shadow-md hover:-translate-y-px transition"
+                type="button"
+                aria-label={menuHidden ? "Show menu" : "Hide menu"}
+                title={`${menuHidden ? "Show" : "Hide"} menu (F2)`}
+            >
+                {menuHidden ? "☰ Show" : "✕ Hide"}
+            </button>
+
             {/* Header */}
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className={[
+                "mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between transition-all duration-200",
+                menuHidden ? "hidden" : "",
+            ].join(" ")}>
                 <div>
                     <div className="text-2xl font-bold tracking-tight">GBA Emulator</div>
                     <div className="text-sm text-(--muted)">Upload .gba → Play in browser (mGBA WASM)</div>
@@ -487,7 +517,10 @@ export default function GbaPlayer() {
             </div>
 
             {/* Tab bar */}
-            <div className="mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1">
+            <div className={[
+                "mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1",
+                menuHidden ? "hidden" : "",
+            ].join(" ")}>
                 {(["emulator", "library"] as const).map((t) => (
                     <button
                         key={t}
@@ -506,9 +539,12 @@ export default function GbaPlayer() {
             </div>
 
             {/* Emulator — always mounted, hidden when on library tab */}
-            <div className={tab !== "emulator" ? "hidden" : ""}>
+            <div className={tab !== "emulator" ? "hidden" : "w-full"}>
                 {/* Controls bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className={[
+                    "flex flex-wrap items-center justify-between gap-3",
+                    menuHidden ? "hidden" : "",
+                ].join(" ")}>
                     <div className="flex items-center gap-3">
                         <div className="text-sm font-medium text-(--text) truncate max-w-48">{romName !== "-" ? romName : "No ROM"}</div>
                         <div className={[
@@ -584,7 +620,10 @@ export default function GbaPlayer() {
                 <MobileControls onPress={press} onRelease={release} />
 
                 {/* Bottom row */}
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className={[
+                    "mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
+                    menuHidden ? "hidden" : "",
+                ].join(" ")}>
                     <div className="text-sm text-(--muted)">{message}</div>
 
                     <label className="inline-flex items-center gap-2">

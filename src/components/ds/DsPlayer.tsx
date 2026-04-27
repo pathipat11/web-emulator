@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -46,10 +45,14 @@ function buildEmulatorHTML(romUrl: string, gameName: string): string {
 }
 
 type Tab = "emulator" | "library";
+type EmulatorState = "idle" | "loading" | "running" | "error";
 
 export default function DsPlayer() {
     const fileInputRef = useRef<HTMLInputElement | null>(null);
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
+    const htmlUrlRef = useRef<string | null>(null);
+    const romUrlRef = useRef<string | null>(null);
+    const loadTimeoutRef = useRef<number | null>(null);
 
     const [tab, setTab] = useState<Tab>("emulator");
     const [romName, setRomName] = useState("-");
@@ -58,8 +61,17 @@ export default function DsPlayer() {
     const [message, setMessage] = useState("Upload a .nds ROM to begin. Emulation powered by EmulatorJS (DeSmuME).");
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
     const [menuHidden, setMenuHidden] = useState(false);
+    const [emulatorState, setEmulatorState] = useState<EmulatorState>("idle");
+    const [isOnline, setIsOnline] = useState(true);
 
-    const status = iframeSrc ? "running" : "idle";
+    const status = emulatorState;
+
+    function revokeActiveUrls() {
+        if (htmlUrlRef.current) URL.revokeObjectURL(htmlUrlRef.current);
+        if (romUrlRef.current) URL.revokeObjectURL(romUrlRef.current);
+        htmlUrlRef.current = null;
+        romUrlRef.current = null;
+    }
 
     // F2 shortcut to toggle menu visibility
     useEffect(() => {
@@ -73,9 +85,25 @@ export default function DsPlayer() {
         return () => window.removeEventListener("keydown", onKeyDown);
     }, []);
 
+    useEffect(() => {
+        setIsOnline(navigator.onLine);
+        const handleOnline = () => setIsOnline(true);
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener("online", handleOnline);
+        window.addEventListener("offline", handleOffline);
+
+        return () => {
+            window.removeEventListener("online", handleOnline);
+            window.removeEventListener("offline", handleOffline);
+            if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
+            revokeActiveUrls();
+        };
+    }, []);
+
     function launchRom(romBytes: Uint8Array, name: string) {
-        // Revoke previous blob URLs
-        if (iframeSrc) URL.revokeObjectURL(iframeSrc);
+        revokeActiveUrls();
+        if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
 
         const ab = new ArrayBuffer(romBytes.byteLength);
         new Uint8Array(ab).set(romBytes);
@@ -87,8 +115,18 @@ export default function DsPlayer() {
         const htmlBlob = new Blob([html], { type: "text/html" });
         const htmlUrl = URL.createObjectURL(htmlBlob);
 
+        romUrlRef.current = romUrl;
+        htmlUrlRef.current = htmlUrl;
+        setEmulatorState("loading");
         setIframeSrc(htmlUrl);
-        setMessage(`Playing: ${name} (${(romBytes.length / 1024 / 1024).toFixed(1)} MB)`);
+        setMessage(`Loading ${name} (${(romBytes.length / 1024 / 1024).toFixed(1)} MB). DS emulation loads EmulatorJS assets from the internet.`);
+        loadTimeoutRef.current = window.setTimeout(() => {
+            setEmulatorState((current) => {
+                if (current !== "loading") return current;
+                setMessage("Still loading EmulatorJS. Check your internet connection if the screen stays blank.");
+                return current;
+            });
+        }, 8000);
     }
 
     async function onUpload(file: File | null) {
@@ -132,10 +170,12 @@ export default function DsPlayer() {
     );
 
     function onEject() {
-        if (iframeSrc) URL.revokeObjectURL(iframeSrc);
+        revokeActiveUrls();
+        if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
         setIframeSrc(null);
         setRomName("-");
         setRomHashState("");
+        setEmulatorState("idle");
         setMessage("ROM ejected. Upload or pick a ROM to play.");
         if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -201,14 +241,24 @@ export default function DsPlayer() {
                         <div className="text-sm font-medium text-(--text) truncate max-w-48">{romName !== "-" ? romName : "No ROM"}</div>
                         <div className={[
                             "h-2 w-2 rounded-full",
-                            status === "running" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]" : "bg-(--muted)/40",
+                            status === "running" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]" : "",
+                            status === "loading" ? "bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,0.5)]" : "",
+                            status === "error" ? "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]" : "",
+                            status === "idle" ? "bg-(--muted)/40" : "",
                         ].join(" ")} />
+                        {romHashState && <div className="text-xs text-(--muted)">#{romHashState.slice(0, 8)}</div>}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={() => setShowEjectConfirm(true)} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition" disabled={status === "idle"} type="button">Eject</button>
-                        <button onClick={onFullscreen} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={status === "idle"} type="button">Fullscreen</button>
+                        <button onClick={() => setShowEjectConfirm(true)} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition" disabled={!iframeSrc} type="button">Eject</button>
+                        <button onClick={onFullscreen} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={!iframeSrc || status === "error"} type="button">Fullscreen</button>
                     </div>
                 </div>
+
+                {!isOnline && (
+                    <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">
+                        DS emulation needs internet access to load EmulatorJS. Reconnect before launching a ROM.
+                    </div>
+                )}
 
                 {/* Emulator display */}
                 <div className="mt-4 mx-auto max-w-2xl">
@@ -227,6 +277,16 @@ export default function DsPlayer() {
                                 allow="autoplay; gamepad"
                                 className="h-full w-full border-none"
                                 style={{ display: "block", background: "#000", borderRadius: "16px" }}
+                                onLoad={() => {
+                                    if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
+                                    setEmulatorState("running");
+                                    setMessage(`Playing: ${romName}. EmulatorJS controls and save states are available inside the player.`);
+                                }}
+                                onError={() => {
+                                    if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
+                                    setEmulatorState("error");
+                                    setMessage("Failed to load the DS emulator frame. Check your internet connection and try again.");
+                                }}
                             />
                         ) : (
                             <div className="absolute inset-0 grid place-items-center text-center">
@@ -234,6 +294,22 @@ export default function DsPlayer() {
                                     <div className="text-4xl mb-3">🎮</div>
                                     <div className="text-sm text-white/50">Upload a .nds ROM to start playing</div>
                                     <div className="mt-1 text-xs text-white/30">EmulatorJS handles controls, audio, and save states</div>
+                                </div>
+                            </div>
+                        )}
+                        {status === "loading" && (
+                            <div className="absolute inset-0 grid place-items-center bg-black/75 text-center text-white">
+                                <div>
+                                    <div className="text-sm font-medium">Loading DS emulator...</div>
+                                    <div className="mt-1 text-xs text-white/50">EmulatorJS assets are loaded from the internet.</div>
+                                </div>
+                            </div>
+                        )}
+                        {status === "error" && (
+                            <div className="absolute inset-0 grid place-items-center bg-black/80 text-center text-white">
+                                <div>
+                                    <div className="text-sm font-medium text-red-200">Unable to start DS emulator</div>
+                                    <div className="mt-1 text-xs text-white/50">Reconnect and load the ROM again.</div>
                                 </div>
                             </div>
                         )}
@@ -259,6 +335,7 @@ export default function DsPlayer() {
                     <div className="font-medium text-(--text) mb-1">Controls</div>
                     EmulatorJS provides built-in controls: keyboard, gamepad, and on-screen touch buttons.
                     Use the emulator&apos;s own toolbar (inside the player) for save states, settings, and fullscreen.
+                    DS emulation requires internet access because EmulatorJS is loaded from its CDN.
                 </div>
             </div>
 

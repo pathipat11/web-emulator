@@ -48,10 +48,7 @@ export function NesSettingsPanel({
     const [slotStatus, setSlotStatus] = useState<Record<number, boolean>>({});
 
     useEffect(() => {
-        if (!show || !romHash) {
-            setSlotStatus({});
-            return;
-        }
+        if (!show || !romHash) return;
         let cancelled = false;
         (async () => {
             const results: Record<number, boolean> = {};
@@ -61,7 +58,6 @@ export function NesSettingsPanel({
             if (!cancelled) setSlotStatus(results);
         })();
         return () => { cancelled = true; };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [show, romHash, saveVersion]);
 
     if (!show) return null;

@@ -1,4 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { NES } from "jsnes";
 import type { NesButton } from "./input";
 
 export type EmulatorStatus = "idle" | "running" | "paused";
@@ -141,17 +142,14 @@ export function createJsnesCore(): NesCore {
             if (ctx) ctx.imageSmoothingEnabled = false;
         },
 
-        loadRom(romBytes, _fileName) {
+        loadRom(romBytes) {
             if (!canvasEl || !ctx) throw new Error("Canvas not attached");
 
             // Stop previous game if any
             stopLoop();
             audioSamples.length = 0;
 
-            // Lazy-import jsnes
-            const jsnes = require("jsnes");
-
-            nes = new jsnes.NES({
+            nes = new NES({
                 onFrame,
                 onAudioSample,
                 sampleRate: SAMPLE_RATE,

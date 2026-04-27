@@ -60,10 +60,7 @@ export function SettingsPanel({
     const [slotStatus, setSlotStatus] = useState<Record<number, boolean>>({});
 
     useEffect(() => {
-        if (!show || !romHash) {
-            setSlotStatus({});
-            return;
-        }
+        if (!show || !romHash) return;
         let cancelled = false;
         (async () => {
             const results: Record<number, boolean> = {};
@@ -74,7 +71,6 @@ export function SettingsPanel({
         })();
         return () => { cancelled = true; };
         // saveVersion triggers re-check when saves change
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [show, romHash, saveVersion]);
 
     if (!show) return null;

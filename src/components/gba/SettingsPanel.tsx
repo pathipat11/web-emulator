@@ -96,7 +96,7 @@ export function SettingsPanel({
             >
                 <div className="flex items-center justify-between">
                     <h2 className="text-lg font-semibold">Settings</h2>
-                    <button onClick={onClose} className="text-sm text-(--muted)" type="button">
+                    <button onClick={onClose} className="text-sm text-(--muted)" type="button" aria-label="Close settings">
                         ✕
                     </button>
                 </div>

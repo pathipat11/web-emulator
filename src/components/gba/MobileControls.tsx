@@ -7,11 +7,13 @@ function Btn({
     onPress,
     onRelease,
     className = "",
+    ariaLabel,
 }: {
     label: string;
     onPress: () => void;
     onRelease: () => void;
     className?: string;
+    ariaLabel?: string;
 }) {
     return (
         <button
@@ -20,6 +22,7 @@ function Btn({
                 "text-center font-semibold shadow-sm active:scale-95 active:bg-(--panel-2) transition-transform",
                 className,
             ].join(" ")}
+            aria-label={ariaLabel ?? label}
             onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId);
                 onPress();
@@ -69,6 +72,7 @@ export function MobileControls({ onPress, onRelease }: Props) {
                     <div />
                     <Btn
                         label="↑"
+                        ariaLabel="D-Pad Up"
                         className="h-11 w-11 text-base"
                         onPress={() => onPress("UP")}
                         onRelease={() => onRelease("UP")}
@@ -76,18 +80,21 @@ export function MobileControls({ onPress, onRelease }: Props) {
                     <div />
                     <Btn
                         label="←"
+                        ariaLabel="D-Pad Left"
                         className="h-11 w-11 text-base"
                         onPress={() => onPress("LEFT")}
                         onRelease={() => onRelease("LEFT")}
                     />
                     <Btn
                         label="↓"
+                        ariaLabel="D-Pad Down"
                         className="h-11 w-11 text-base"
                         onPress={() => onPress("DOWN")}
                         onRelease={() => onRelease("DOWN")}
                     />
                     <Btn
                         label="→"
+                        ariaLabel="D-Pad Right"
                         className="h-11 w-11 text-base"
                         onPress={() => onPress("RIGHT")}
                         onRelease={() => onRelease("RIGHT")}

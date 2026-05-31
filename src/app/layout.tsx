@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { TurboToastProvider } from "@/components/gba/TurboToastProvider";
 import ThemeScript from "@/components/ThemeScript";
 
 export const metadata: Metadata = {
@@ -15,7 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeScript />
       </head>
       <body>
-        <TurboToastProvider>{children}</TurboToastProvider>
+        {children}
       </body>
     </html>
   );

@@ -7,11 +7,13 @@ function Btn({
     onPress,
     onRelease,
     className = "",
+    ariaLabel,
 }: {
     label: string;
     onPress: () => void;
     onRelease: () => void;
     className?: string;
+    ariaLabel?: string;
 }) {
     return (
         <button
@@ -20,6 +22,7 @@ function Btn({
                 "text-center font-semibold shadow-sm active:scale-95 active:bg-(--panel-2) transition-transform",
                 className,
             ].join(" ")}
+            aria-label={ariaLabel ?? label}
             onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId);
                 onPress();
@@ -50,11 +53,11 @@ export function NesMobileControls({ onPress, onRelease }: Props) {
                 {/* D-Pad */}
                 <div className="grid grid-cols-3 gap-1.5">
                     <div />
-                    <Btn label="↑" className="h-11 w-11 text-base" onPress={() => onPress("UP")} onRelease={() => onRelease("UP")} />
+                    <Btn label="↑" ariaLabel="D-Pad Up" className="h-11 w-11 text-base" onPress={() => onPress("UP")} onRelease={() => onRelease("UP")} />
                     <div />
-                    <Btn label="←" className="h-11 w-11 text-base" onPress={() => onPress("LEFT")} onRelease={() => onRelease("LEFT")} />
-                    <Btn label="↓" className="h-11 w-11 text-base" onPress={() => onPress("DOWN")} onRelease={() => onRelease("DOWN")} />
-                    <Btn label="→" className="h-11 w-11 text-base" onPress={() => onPress("RIGHT")} onRelease={() => onRelease("RIGHT")} />
+                    <Btn label="←" ariaLabel="D-Pad Left" className="h-11 w-11 text-base" onPress={() => onPress("LEFT")} onRelease={() => onRelease("LEFT")} />
+                    <Btn label="↓" ariaLabel="D-Pad Down" className="h-11 w-11 text-base" onPress={() => onPress("DOWN")} onRelease={() => onRelease("DOWN")} />
+                    <Btn label="→" ariaLabel="D-Pad Right" className="h-11 w-11 text-base" onPress={() => onPress("RIGHT")} onRelease={() => onRelease("RIGHT")} />
                 </div>
 
                 {/* Start / Select */}

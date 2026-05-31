@@ -30,14 +30,15 @@ Powered by [mGBA](https://mgba.io/) compiled to WebAssembly via `@thenick775/mgb
 - Screenshot capture (also sets ROM cover art)
 - Fullscreen mode
 - Audio toggle
+- Hide/show all UI chrome with `F2` (or the floating toggle button) for a distraction-free, centered screen
 
 ### NES Emulator
 
 Powered by [JSNES](https://github.com/bfirsh/jsnes), a JavaScript NES emulator. The core runs a `requestAnimationFrame` loop, rendering each frame to a 256×240 canvas and piping audio samples through a `ScriptProcessorNode`.
 
 - Upload `.nes` ROMs and play instantly
-- Separate NES ROM Library (IndexedDB + localStorage), independent from GBA
-- 3 save state slots (JSON-serialized emulator state stored in localStorage)
+- Separate NES ROM Library (IndexedDB), independent from GBA
+- 3 save state slots (JSON-serialized emulator state stored in IndexedDB) with auto-save on page close
 - Remappable keyboard controls via the NES Keymap Editor
 - Gamepad support with NES-specific button mapping (no L/R shoulders)
 - Mobile touch controls (D-Pad, A/B, Start/Select)
@@ -63,6 +64,7 @@ Powered by [EmulatorJS](https://emulatorjs.org/) using the DeSmuME 2015 core. Un
 - Responsive layout for desktop and mobile
 - Settings panel slides in as a modal drawer (dismissible with `Escape`) — GBA and NES
 - Confirm dialogs for destructive actions (eject ROM, delete from library)
+- Distraction-free mode: press `F2` (or the floating toggle) to hide all UI chrome and center the screen — available on all three players
 
 ## Architecture
 
@@ -82,24 +84,35 @@ GBA and NES each define their own button type, default keymap, and gamepad mappi
 - NES: `A`, `B`, `START`, `SELECT`, `UP`, `DOWN`, `LEFT`, `RIGHT` (no shoulder buttons)
 - DS: Input handled entirely by EmulatorJS inside the iframe
 
-Input is handled through dedicated React hooks per system:
-- `useKeyboardInput` / `useNesKeyboardInput` — keyboard event listeners mapped through the active keymap
-- `useGamepadInput` / `useNesGamepadInput` — Gamepad API polling via `requestAnimationFrame` with button and axis support
-- `useKeymap` / `useNesKeymap` — remappable keymap state persisted to localStorage
+Input is handled through shared, generic React hooks parameterized by each system's
+button type (`B`) — there are no per-system copies:
+
+- `useKeyboardInput<B>(coreRef, keymap)` — keyboard event listeners mapped through the active keymap
+- `useGamepadInput<B>(coreRef, mapping, setInfo)` — Gamepad API polling via `requestAnimationFrame` with button and axis support
+- `useKeymap<B>(storageKey, defaults)` — remappable keymap state persisted to localStorage
+
+The hooks depend only on the minimal `EmulatorCore` interface (`status`, `press`,
+`release`) and the generic `GamepadMapping<B>` shape, both defined in
+`src/lib/emulator-core.ts`. This is what lets GBA and NES (and future systems) share the
+exact same input code.
 
 ### Storage Layer
 
-ROM bytes are stored in IndexedDB (no size limits), while metadata and save states use localStorage for fast synchronous reads. Each system has its own isolated storage:
+ROM bytes and save states both live in IndexedDB (no practical size limits). localStorage
+is used only for fast synchronous reads of ROM metadata lists, keymaps, and theme. Each
+system has its own isolated storage:
 
-| System | ROM Store | Save State Store | IndexedDB Name |
-| --- | --- | --- | --- |
-| GBA | `romStore.ts` | `saveStateStore.ts` | `gba_rom_library` |
-| NES | `nesRomStore.ts` | `nesSaveStateStore.ts` | `nes_rom_library` |
-| DS | `dsRomStore.ts` | (managed by EmulatorJS) | `ds_rom_library` |
+| System | ROM Store | Save State Store | ROM IndexedDB | Save IndexedDB |
+| --- | --- | --- | --- | --- |
+| GBA | `romStore.ts` | `saveStateStore.ts` | `gba_rom_library` | `gba_save_states` |
+| NES | `nesRomStore.ts` | `nesSaveStateStore.ts` | `nes_rom_library` | `nes_save_states` |
+| DS | `dsRomStore.ts` | (managed by EmulatorJS) | `ds_rom_library` | — |
 
-- Each ROM is identified by a SHA-256 hash (first 16 hex chars) to deduplicate
-- GBA save states: base64-encoded binary in localStorage
-- NES save states: JSON-serialized emulator state in localStorage
+- ROM stores are built from the shared `createRomStore(dbName, metaListKey)` factory in `createRomStore.ts`
+- Each ROM is identified by a SHA-256 hash (first 16 hex chars, via `lib/hashRom.ts`) to deduplicate
+- Save-state store functions are **async** (they return Promises) — callers must `await` them
+- GBA save states: raw bytes in IndexedDB
+- NES save states: JSON-serialized emulator state in IndexedDB
 - DS save states: managed internally by EmulatorJS
 
 ## Tech Stack
@@ -109,7 +122,7 @@ ROM bytes are stored in IndexedDB (no size limits), while metadata and save stat
 - **GBA Emulation:** mGBA WASM (`@thenick775/mgba-wasm`)
 - **NES Emulation:** JSNES (`jsnes`)
 - **DS Emulation:** EmulatorJS + DeSmuME 2015 (loaded from CDN)
-- **Storage:** IndexedDB (ROM bytes), localStorage (save states, settings, keymaps, ROM metadata)
+- **Storage:** IndexedDB (ROM bytes & save states), localStorage (settings, keymaps, ROM metadata, theme)
 - **Language:** TypeScript
 - **Fonts:** Geist Sans & Geist Mono (via `next/font`)
 
@@ -172,6 +185,8 @@ src/
 └── lib/
     ├── input.ts                # GBA button type & default keymap
     ├── gamepad.ts              # GBA gamepad mapping
+    ├── emulator-core.ts        # Shared EmulatorCore interface & GamepadMapping shape
+    ├── hashRom.ts              # Shared SHA-256 ROM hashing helper
     ├── storage.ts              # Generic IndexedDB helpers
     │
     ├── gba/
@@ -185,22 +200,21 @@ src/
     │   └── gamepad.ts          # NES gamepad mapping
     │
     ├── hooks/
-    │   ├── useKeyboardInput.ts     # GBA keyboard → core
-    │   ├── useGamepadInput.ts      # GBA gamepad → core
-    │   ├── useKeymap.ts            # GBA remappable keymap (localStorage)
+    │   ├── useKeyboardInput.ts     # Generic keyboard → core (any system)
+    │   ├── useGamepadInput.ts      # Generic gamepad → core (any system)
+    │   ├── useKeymap.ts            # Generic remappable keymap (localStorage)
     │   ├── useTurbo.ts             # GBA turbo state → core
     │   ├── useTurboShortcuts.ts    # GBA turbo keyboard shortcuts
     │   ├── useAutoSaveOnClose.ts   # GBA auto-save on page hide
-    │   ├── useNesKeyboardInput.ts  # NES keyboard → core
-    │   ├── useNesGamepadInput.ts   # NES gamepad → core
-    │   └── useNesKeymap.ts         # NES remappable keymap (localStorage)
+    │   └── useNesAutoSaveOnClose.ts # NES auto-save on page hide
     │
     └── storage/
-        ├── romStore.ts             # GBA ROM library (IDB + localStorage)
-        ├── saveStateStore.ts       # GBA save states (localStorage, base64)
-        ├── nesRomStore.ts          # NES ROM library (IDB + localStorage)
-        ├── nesSaveStateStore.ts    # NES save states (localStorage, JSON)
-        └── dsRomStore.ts           # DS ROM library (IDB + localStorage)
+        ├── createRomStore.ts       # Generic ROM library factory (IDB + localStorage)
+        ├── romStore.ts             # GBA ROM library
+        ├── saveStateStore.ts       # GBA save states (IndexedDB, raw bytes)
+        ├── nesRomStore.ts          # NES ROM library
+        ├── nesSaveStateStore.ts    # NES save states (IndexedDB, JSON)
+        └── dsRomStore.ts           # DS ROM library
 
 public/
 ├── images/          # System card images
@@ -217,6 +231,13 @@ public/
 | `npm run build` | Production build |
 | `npm run start` | Serve production build |
 | `npm run lint` | Run ESLint |
+
+## Contributing
+
+Working in this repo (human or AI agent)? Start with [`AGENTS.md`](./AGENTS.md) for
+conventions, architecture, and gotchas. To add a new emulator system, follow the
+step-by-step skill at
+[`.agents/skills/add-emulator-system/SKILL.md`](./.agents/skills/add-emulator-system/SKILL.md).
 
 ## Repository
 

@@ -291,6 +291,12 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     await expect(
         phonePage.getByRole("button", { name: "L", exact: true }),
     ).toBeEnabled();
+    await expect(
+        phonePage.getByRole("button", { name: "X", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+        phonePage.getByRole("button", { name: "Y", exact: true }),
+    ).toHaveCount(0);
     const joystick = phonePage.getByRole("application", {
         name: "Virtual joystick",
     });
@@ -316,12 +322,13 @@ test("a phone can pair with the GBA player through WebRTC", async ({
             (element) => getComputedStyle(element).transform,
         ),
     ).not.toBe(centeredTransform);
-    await phonePage.mouse.up();
+    await phonePage.evaluate(() => window.dispatchEvent(new Event("blur")));
     await expect.poll(
         () => joystickThumb.evaluate(
             (element) => getComputedStyle(element).transform,
         ),
     ).toBe(centeredTransform);
+    await phonePage.mouse.up();
 
     await phonePage.getByRole("button", { name: "Connected" }).click();
     const connectionDialog = phonePage.getByRole("dialog", {

@@ -76,6 +76,25 @@ export function VirtualJoystick({
         };
     }, []);
 
+    useEffect(() => {
+        const resetInput = () => {
+            activePointerRef.current = null;
+            releaseDirections();
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "hidden") resetInput();
+        };
+
+        window.addEventListener("blur", resetInput);
+        window.addEventListener("pagehide", resetInput);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            window.removeEventListener("blur", resetInput);
+            window.removeEventListener("pagehide", resetInput);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
+    }, [releaseDirections]);
+
     const updateJoystick = useCallback(
         (clientX: number, clientY: number, element: HTMLDivElement) => {
             const rect = element.getBoundingClientRect();

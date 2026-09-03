@@ -12,4 +12,7 @@ export type PhoneControlMessage =
     }
     | {
         type: "release-all";
+    }
+    | {
+        type: "heartbeat";
     };

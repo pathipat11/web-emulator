@@ -51,6 +51,8 @@ export function usePhoneController<B extends string>({
     const peerRef = useRef<RTCPeerConnection | null>(null);
     const channelRef = useRef<RTCDataChannel | null>(null);
     const pollTimerRef = useRef<number | null>(null);
+    const heartbeatTimerRef = useRef<number | null>(null);
+    const lastHeartbeatRef = useRef(0);
     const sessionRef = useRef<{ code: string; hostToken: string } | null>(null);
     const pressedButtonsRef = useRef(new Set<B>());
     const generationRef = useRef(0);
@@ -64,9 +66,16 @@ export function usePhoneController<B extends string>({
         pressedButtonsRef.current.clear();
     }, [coreRef]);
 
+    const stopHeartbeatWatch = useCallback(() => {
+        if (heartbeatTimerRef.current === null) return;
+        window.clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+    }, []);
+
     const dispose = useCallback(
         (resetState: boolean) => {
             generationRef.current += 1;
+            stopHeartbeatWatch();
             if (pollTimerRef.current !== null) {
                 window.clearInterval(pollTimerRef.current);
                 pollTimerRef.current = null;
@@ -91,7 +100,7 @@ export function usePhoneController<B extends string>({
             releaseAll();
             if (resetState) setState(INITIAL_STATE);
         },
-        [releaseAll],
+        [releaseAll, stopHeartbeatWatch],
     );
 
     const handleMessage = useCallback(
@@ -103,6 +112,8 @@ export function usePhoneController<B extends string>({
                 return;
             }
 
+            lastHeartbeatRef.current = Date.now();
+            if (message.type === "heartbeat") return;
             if (message.type === "release-all") {
                 releaseAll();
                 return;
@@ -162,6 +173,13 @@ export function usePhoneController<B extends string>({
                         { method: "DELETE", keepalive: true },
                     );
                 }
+                lastHeartbeatRef.current = Date.now();
+                stopHeartbeatWatch();
+                heartbeatTimerRef.current = window.setInterval(() => {
+                    if (Date.now() - lastHeartbeatRef.current > 5_000) {
+                        releaseAll();
+                    }
+                }, 1_000);
                 setState((current) => ({
                     ...current,
                     status: "connected",
@@ -169,6 +187,7 @@ export function usePhoneController<B extends string>({
                 }));
             });
             channel.addEventListener("close", () => {
+                stopHeartbeatWatch();
                 releaseAll();
                 if (generation !== generationRef.current) return;
                 setState((current) => (
@@ -182,16 +201,31 @@ export function usePhoneController<B extends string>({
                 ));
             });
             peer.addEventListener("connectionstatechange", () => {
-                if (
-                    generation !== generationRef.current ||
-                    peer.connectionState !== "failed"
-                ) return;
-                releaseAll();
-                setState((current) => ({
-                    ...current,
-                    status: "error",
-                    message: "Unable to establish the phone controller connection.",
-                }));
+                if (generation !== generationRef.current) return;
+                if (peer.connectionState === "disconnected") {
+                    releaseAll();
+                    setState((current) => ({
+                        ...current,
+                        message: "Connection interrupted. Waiting for the phone...",
+                    }));
+                } else if (peer.connectionState === "connected") {
+                    setState((current) => (
+                        current.status === "connected"
+                            ? {
+                                ...current,
+                                message: "Phone controller connected.",
+                            }
+                            : current
+                    ));
+                } else if (peer.connectionState === "failed") {
+                    stopHeartbeatWatch();
+                    releaseAll();
+                    setState((current) => ({
+                        ...current,
+                        status: "error",
+                        message: "Unable to restore the phone controller connection.",
+                    }));
+                }
             });
 
             const offer = await peer.createOffer();
@@ -294,7 +328,13 @@ export function usePhoneController<B extends string>({
                 message: error instanceof Error ? error.message : String(error),
             });
         }
-    }, [dispose, handleMessage, releaseAll, system]);
+    }, [
+        dispose,
+        handleMessage,
+        releaseAll,
+        stopHeartbeatWatch,
+        system,
+    ]);
 
     const stopPairing = useCallback(() => {
         dispose(true);
@@ -303,6 +343,18 @@ export function usePhoneController<B extends string>({
     useEffect(() => {
         return () => dispose(false);
     }, [dispose]);
+
+    useEffect(() => {
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "hidden") releaseAll();
+        };
+        window.addEventListener("pagehide", releaseAll);
+        document.addEventListener("visibilitychange", onVisibilityChange);
+        return () => {
+            window.removeEventListener("pagehide", releaseAll);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+        };
+    }, [releaseAll]);
 
     return {
         state,

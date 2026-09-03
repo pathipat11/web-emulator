@@ -22,9 +22,24 @@ type ConnectionStatus =
     | "connected"
     | "error";
 
-const SYSTEM_BUTTONS: Record<PhoneControllerSystem, readonly string[]> = {
-    gba: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "L", "R", "START", "SELECT"],
-    nes: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START", "SELECT"],
+const SYSTEM_CONTROLS: Record<
+    PhoneControllerSystem,
+    {
+        buttons: readonly string[];
+        shoulders: readonly string[];
+        faceButtons: readonly string[];
+    }
+> = {
+    gba: {
+        buttons: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "L", "R", "START", "SELECT"],
+        shoulders: ["L", "R"],
+        faceButtons: ["B", "A"],
+    },
+    nes: {
+        buttons: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START", "SELECT"],
+        shoulders: [],
+        faceButtons: ["B", "A"],
+    },
 };
 
 function ConnectionDialog({
@@ -181,6 +196,18 @@ function ControllerButton({
     disabled: boolean;
     round?: boolean;
 }) {
+    const activePointerRef = useRef<number | null>(null);
+
+    const finishPointer = (event: React.PointerEvent<HTMLButtonElement>) => {
+        if (activePointerRef.current !== event.pointerId) return;
+        activePointerRef.current = null;
+        event.preventDefault();
+        onRelease(button);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+            event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+    };
+
     return (
         <button
             type="button"
@@ -194,20 +221,20 @@ function ControllerButton({
             ].join(" ")}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => {
+                if (activePointerRef.current !== null) return;
                 event.preventDefault();
+                activePointerRef.current = event.pointerId;
                 event.currentTarget.setPointerCapture(event.pointerId);
                 onPress(button);
                 navigator.vibrate?.(8);
             }}
-            onPointerUp={(event) => {
-                event.preventDefault();
+            onPointerUp={finishPointer}
+            onPointerCancel={finishPointer}
+            onLostPointerCapture={(event) => {
+                if (activePointerRef.current !== event.pointerId) return;
+                activePointerRef.current = null;
                 onRelease(button);
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                }
             }}
-            onPointerCancel={() => onRelease(button)}
-            onLostPointerCapture={() => onRelease(button)}
         >
             {label}
         </button>
@@ -230,6 +257,7 @@ export default function PhoneControllerClient({
     const [connectionOpen, setConnectionOpen] = useState(Boolean(initialCode));
     const peerRef = useRef<RTCPeerConnection | null>(null);
     const channelRef = useRef<RTCDataChannel | null>(null);
+    const heartbeatTimerRef = useRef<number | null>(null);
     const pressedButtonsRef = useRef(new Set<string>());
     const generationRef = useRef(0);
 
@@ -246,8 +274,23 @@ export default function PhoneControllerClient({
         pressedButtonsRef.current.clear();
     }, [sendMessage]);
 
+    const stopHeartbeat = useCallback(() => {
+        if (heartbeatTimerRef.current === null) return;
+        window.clearInterval(heartbeatTimerRef.current);
+        heartbeatTimerRef.current = null;
+    }, []);
+
+    const startHeartbeat = useCallback(() => {
+        stopHeartbeat();
+        sendMessage({ type: "heartbeat" });
+        heartbeatTimerRef.current = window.setInterval(() => {
+            sendMessage({ type: "heartbeat" });
+        }, 1_000);
+    }, [sendMessage, stopHeartbeat]);
+
     const disconnect = useCallback((resetState: boolean) => {
         generationRef.current += 1;
+        stopHeartbeat();
         releaseAll();
         channelRef.current?.close();
         channelRef.current = null;
@@ -258,7 +301,7 @@ export default function PhoneControllerClient({
             setSystem(null);
             setMessage("Enter a pairing code to reconnect.");
         }
-    }, [releaseAll]);
+    }, [releaseAll, stopHeartbeat]);
 
     const press = useCallback((button: string) => {
         if (pressedButtonsRef.current.has(button)) return;
@@ -315,11 +358,13 @@ export default function PhoneControllerClient({
                 channelRef.current = channel;
                 channel.addEventListener("open", () => {
                     if (generation !== generationRef.current) return;
+                    startHeartbeat();
                     setStatus("connected");
                     setMessage("Connected. Your phone is now the controller.");
                     setConnectionOpen(false);
                 });
                 channel.addEventListener("close", () => {
+                    stopHeartbeat();
                     releaseAll();
                     if (generation !== generationRef.current) return;
                     setStatus("error");
@@ -328,14 +373,27 @@ export default function PhoneControllerClient({
                 });
             });
             peer.addEventListener("connectionstatechange", () => {
-                if (
-                    generation !== generationRef.current ||
-                    peer.connectionState !== "failed"
-                ) return;
-                releaseAll();
-                setStatus("error");
-                setMessage("Unable to establish a direct controller connection.");
-                setConnectionOpen(true);
+                if (generation !== generationRef.current) return;
+                if (peer.connectionState === "disconnected") {
+                    releaseAll();
+                    setStatus("waiting");
+                    setMessage("Connection interrupted. Waiting for the emulator...");
+                } else if (
+                    peer.connectionState === "connected" &&
+                    channelRef.current?.readyState === "open"
+                ) {
+                    setStatus("connected");
+                    setMessage("Connected. Your phone is now the controller.");
+                    setConnectionOpen(false);
+                } else if (peer.connectionState === "failed") {
+                    stopHeartbeat();
+                    releaseAll();
+                    setStatus("error");
+                    setMessage(
+                        "Connection lost. Create a new pairing code on the emulator to reconnect.",
+                    );
+                    setConnectionOpen(true);
+                }
             });
 
             await peer.setRemoteDescription(session.offer);
@@ -371,28 +429,48 @@ export default function PhoneControllerClient({
             peerRef.current?.close();
             peerRef.current = null;
             channelRef.current = null;
+            stopHeartbeat();
             setStatus("error");
             setMessage(error instanceof Error ? error.message : String(error));
             setConnectionOpen(true);
         }
-    }, [code, disconnect, releaseAll]);
+    }, [
+        code,
+        disconnect,
+        releaseAll,
+        startHeartbeat,
+        stopHeartbeat,
+    ]);
 
     useEffect(() => {
         const onVisibilityChange = () => {
-            if (document.visibilityState === "hidden") releaseAll();
+            if (document.visibilityState === "hidden") {
+                releaseAll();
+            } else if (channelRef.current?.readyState === "open") {
+                sendMessage({ type: "heartbeat" });
+            }
+        };
+        const onFocus = () => {
+            if (channelRef.current?.readyState === "open") {
+                sendMessage({ type: "heartbeat" });
+            }
         };
         window.addEventListener("pagehide", releaseAll);
+        window.addEventListener("focus", onFocus);
         document.addEventListener("visibilitychange", onVisibilityChange);
         return () => {
             window.removeEventListener("pagehide", releaseAll);
+            window.removeEventListener("focus", onFocus);
             document.removeEventListener("visibilitychange", onVisibilityChange);
             disconnect(false);
         };
-    }, [disconnect, releaseAll]);
+    }, [disconnect, releaseAll, sendMessage]);
 
     const connected = status === "connected" && system !== null;
-    const buttons = system ? SYSTEM_BUTTONS[system] : [];
-    const hasShoulders = system === "gba";
+    const controls = system ? SYSTEM_CONTROLS[system] : null;
+    const buttons = controls?.buttons ?? [];
+    const [leftShoulder, rightShoulder] = controls?.shoulders ?? [];
+    const faceButtons = controls?.faceButtons ?? ["B", "A"];
 
     return (
         <main className="h-dvh overflow-hidden bg-(--bg) p-2 text-(--text) sm:p-3">
@@ -448,10 +526,10 @@ export default function PhoneControllerClient({
 
                     <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-[clamp(0.35rem,2.5vw,2rem)]">
                         <div className="flex min-w-0 flex-col items-center justify-center gap-2">
-                            {hasShoulders && (
+                            {leftShoulder && (
                                 <ControllerButton
-                                    label="L"
-                                    button="L"
+                                    label={leftShoulder}
+                                    button={leftShoulder}
                                     onPress={press}
                                     onRelease={release}
                                     disabled={!connected}
@@ -485,34 +563,31 @@ export default function PhoneControllerClient({
                         </div>
 
                         <div className="flex min-w-0 flex-col items-center justify-center gap-2">
-                            {hasShoulders && (
+                            {rightShoulder && (
                                 <ControllerButton
-                                    label="R"
-                                    button="R"
+                                    label={rightShoulder}
+                                    button={rightShoulder}
                                     onPress={press}
                                     onRelease={release}
                                     disabled={!connected}
                                 />
                             )}
                             <div className="flex items-center justify-center gap-[clamp(0.35rem,1.5vw,0.75rem)]">
-                                <ControllerButton
-                                    label="B"
-                                    button="B"
-                                    onPress={press}
-                                    onRelease={release}
-                                    disabled={!connected}
-                                    round
-                                />
-                                <div className="-translate-y-[18%]">
-                                    <ControllerButton
-                                        label="A"
-                                        button="A"
-                                        onPress={press}
-                                        onRelease={release}
-                                        disabled={!connected}
-                                        round
-                                    />
-                                </div>
+                                {faceButtons.map((button, index) => (
+                                    <div
+                                        key={button}
+                                        className={index % 2 === 1 ? "-translate-y-[18%]" : ""}
+                                    >
+                                        <ControllerButton
+                                            label={button}
+                                            button={button}
+                                            onPress={press}
+                                            onRelease={release}
+                                            disabled={!connected}
+                                            round
+                                        />
+                                    </div>
+                                ))}
                             </div>
                         </div>
                     </div>

@@ -15,6 +15,7 @@ import { MobileControls } from "@/components/gba/MobileControls";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
 import { ConfirmDialog } from "@/components/gba/ConfirmDialog";
 import { EmulatorQuickMenu } from "@/components/emulator/QuickMenu";
+import { PhoneControllerDialog } from "@/components/emulator/PhoneControllerDialog";
 import { RomLibrary } from "@/components/gba/RomLibrary";
 import Link from "next/link";
 
@@ -23,12 +24,26 @@ import { TurboRate } from "@/lib/gba/core-adapter";
 import { useTurboShortcuts } from "@/lib/hooks/useTurboShortcuts";
 import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
 import { useKeymap } from "@/lib/hooks/useKeymap";
+import { usePhoneController } from "@/lib/hooks/usePhoneController";
 import { defaultKeymap } from "@/lib/input";
 import { hashRom } from "@/lib/hashRom";
 import { getSaveState, type Slot } from "@/lib/storage/saveStateStore";
 import { getRomBytes, touchLastPlayed, setCoverArt, upsertRomEntry, putRomBytes } from "@/lib/storage/romStore";
 
 type Tab = "emulator" | "library";
+
+const GBA_PHONE_BUTTONS: readonly GbaButton[] = [
+    "UP",
+    "DOWN",
+    "LEFT",
+    "RIGHT",
+    "A",
+    "B",
+    "L",
+    "R",
+    "START",
+    "SELECT",
+];
 
 async function loadPortableState(
     core: GbaCore,
@@ -60,6 +75,7 @@ export default function GbaPlayer() {
     const [showSettings, setShowSettings] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [showQuickMenu, setShowQuickMenu] = useState(false);
+    const [showPhoneController, setShowPhoneController] = useState(false);
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
     const [saveVersion, setSaveVersion] = useState(0);
     const [menuHidden, setMenuHidden] = useState(false);
@@ -91,9 +107,22 @@ export default function GbaPlayer() {
 
     // keymap (remappable)
     const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap<GbaButton>("gba:keymap", defaultKeymap);
+    const {
+        state: phoneControllerState,
+        startPairing: startPhonePairing,
+        stopPairing: stopPhonePairing,
+    } = usePhoneController({
+        coreRef,
+        system: "gba",
+        buttons: GBA_PHONE_BUTTONS,
+    });
 
     // inputs
-    const gameplayInputEnabled = !showQuickMenu && !showSettings && !showEjectConfirm;
+    const gameplayInputEnabled =
+        !showQuickMenu &&
+        !showSettings &&
+        !showPhoneController &&
+        !showEjectConfirm;
     useKeyboardInput(coreRef, keymap, gameplayInputEnabled);
     useGamepadInput(coreRef, defaultGamepadMapping, setGamepadInfo, gameplayInputEnabled);
 
@@ -746,11 +775,31 @@ export default function GbaPlayer() {
                     setShowQuickMenu(false);
                 }}
                 onToggleAudio={() => setAudioEnabled((enabled) => !enabled)}
+                phoneControllerStatus={phoneControllerState.status}
+                onOpenPhoneController={() => {
+                    setShowQuickMenu(false);
+                    setShowPhoneController(true);
+                    if (
+                        phoneControllerState.status === "idle" ||
+                        phoneControllerState.status === "error"
+                    ) {
+                        void startPhonePairing();
+                    }
+                }}
                 onOpenSettings={openSettings}
                 onEject={() => {
                     setShowQuickMenu(false);
                     setShowEjectConfirm(true);
                 }}
+            />
+
+            <PhoneControllerDialog
+                open={showPhoneController}
+                systemLabel="Game Boy Advance"
+                state={phoneControllerState}
+                onClose={() => setShowPhoneController(false)}
+                onStart={() => void startPhonePairing()}
+                onStop={stopPhonePairing}
             />
 
             <SettingsPanel

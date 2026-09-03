@@ -18,6 +18,7 @@ import { NesMobileControls } from "@/components/nes/MobileControls";
 import { NesSettingsPanel } from "@/components/nes/NesSettingsPanel";
 import { ConfirmDialog } from "@/components/nes/ConfirmDialog";
 import { EmulatorQuickMenu } from "@/components/emulator/QuickMenu";
+import { PhoneControllerDialog } from "@/components/emulator/PhoneControllerDialog";
 import { NesRomLibrary } from "@/components/nes/NesRomLibrary";
 import Link from "next/link";
 
@@ -34,8 +35,20 @@ import {
     putNesMeta,
 } from "@/lib/storage/nesSaveStateStore";
 import { hashRom } from "@/lib/hashRom";
+import { usePhoneController } from "@/lib/hooks/usePhoneController";
 
 type Tab = "emulator" | "library";
+
+const NES_PHONE_BUTTONS: readonly NesButton[] = [
+    "UP",
+    "DOWN",
+    "LEFT",
+    "RIGHT",
+    "A",
+    "B",
+    "START",
+    "SELECT",
+];
 
 export default function NesPlayer() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -53,6 +66,7 @@ export default function NesPlayer() {
     const [showSettings, setShowSettings] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [showQuickMenu, setShowQuickMenu] = useState(false);
+    const [showPhoneController, setShowPhoneController] = useState(false);
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
 
     const [audioEnabled, setAudioEnabled] = useState(true);
@@ -69,8 +83,21 @@ export default function NesPlayer() {
     }, [audioEnabled]);
 
     const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap<NesButton>("nes:keymap", defaultNesKeymap);
+    const {
+        state: phoneControllerState,
+        startPairing: startPhonePairing,
+        stopPairing: stopPhonePairing,
+    } = usePhoneController({
+        coreRef,
+        system: "nes",
+        buttons: NES_PHONE_BUTTONS,
+    });
 
-    const gameplayInputEnabled = !showQuickMenu && !showSettings && !showEjectConfirm;
+    const gameplayInputEnabled =
+        !showQuickMenu &&
+        !showSettings &&
+        !showPhoneController &&
+        !showEjectConfirm;
     useKeyboardInput(coreRef, keymap, gameplayInputEnabled);
     useGamepadInput(coreRef, defaultNesGamepadMapping, setGamepadInfo, gameplayInputEnabled);
 
@@ -560,11 +587,31 @@ export default function NesPlayer() {
                     setShowQuickMenu(false);
                 }}
                 onToggleAudio={() => setAudioEnabled((enabled) => !enabled)}
+                phoneControllerStatus={phoneControllerState.status}
+                onOpenPhoneController={() => {
+                    setShowQuickMenu(false);
+                    setShowPhoneController(true);
+                    if (
+                        phoneControllerState.status === "idle" ||
+                        phoneControllerState.status === "error"
+                    ) {
+                        void startPhonePairing();
+                    }
+                }}
                 onOpenSettings={openSettings}
                 onEject={() => {
                     setShowQuickMenu(false);
                     setShowEjectConfirm(true);
                 }}
+            />
+
+            <PhoneControllerDialog
+                open={showPhoneController}
+                systemLabel="Nintendo NES"
+                state={phoneControllerState}
+                onClose={() => setShowPhoneController(false)}
+                onStart={() => void startPhonePairing()}
+                onStop={stopPhonePairing}
             />
 
             <NesSettingsPanel

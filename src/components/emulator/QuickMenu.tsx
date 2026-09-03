@@ -2,6 +2,7 @@
 
 import { useModalDialog } from "@/lib/hooks/useModalDialog";
 import { useGamepadMenuNavigation } from "@/lib/hooks/useGamepadMenuNavigation";
+import type { PhoneControllerStatus } from "@/lib/hooks/usePhoneController";
 
 type EmulatorStatus = "idle" | "running" | "paused";
 type SaveSlot = 1 | 2 | 3;
@@ -61,6 +62,8 @@ export function EmulatorQuickMenu({
     onScreenshot,
     onFullscreen,
     onToggleAudio,
+    phoneControllerStatus,
+    onOpenPhoneController,
     onOpenSettings,
     onEject,
 }: {
@@ -78,6 +81,8 @@ export function EmulatorQuickMenu({
     onScreenshot: () => void;
     onFullscreen: () => void;
     onToggleAudio: () => void;
+    phoneControllerStatus: PhoneControllerStatus;
+    onOpenPhoneController: () => void;
     onOpenSettings: () => void;
     onEject: () => void;
 }) {
@@ -154,6 +159,17 @@ export function EmulatorQuickMenu({
                         label={audioEnabled ? "Audio On" : "Audio Off"}
                         detail="Toggle emulator audio"
                         onClick={onToggleAudio}
+                    />
+                    <MenuButton
+                        label="Phone Controller"
+                        detail={
+                            phoneControllerStatus === "connected"
+                                ? "Connected"
+                                : phoneControllerStatus === "waiting"
+                                    ? "Waiting for phone"
+                                    : "Pair a phone"
+                        }
+                        onClick={onOpenPhoneController}
                     />
                     <MenuButton label="Settings" detail="Saves, turbo and controls" onClick={onOpenSettings} />
                     <MenuButton label="Eject ROM" detail="Return to empty player" onClick={onEject} disabled={!hasRom} danger />

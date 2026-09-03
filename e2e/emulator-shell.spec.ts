@@ -143,3 +143,41 @@ test("Nintendo DS can retry a failed CDN load without selecting the ROM again", 
     expect(loaderRequests).toBeGreaterThanOrEqual(2);
     await expect(page.locator('input[type="file"][accept=".nds"]')).toHaveCount(1);
 });
+
+test("a phone can pair with the GBA player through WebRTC", async ({
+    page,
+    context,
+}) => {
+    await page.goto("/gba");
+    await page.getByRole("button", { name: "Quick Menu" }).click();
+    const quickMenu = page.getByRole("dialog", { name: "Quick Menu" });
+    await quickMenu.getByRole("button", { name: "Phone Controller" }).click();
+
+    const hostDialog = page.getByRole("dialog", { name: "Phone Controller" });
+    await expect(hostDialog).toBeVisible();
+    const controllerLink = hostDialog.getByRole("link", {
+        name: "Open controller",
+    });
+    await expect(controllerLink).toBeVisible({ timeout: 15_000 });
+    const pairingUrl = await controllerLink.getAttribute("href");
+    expect(pairingUrl).toBeTruthy();
+
+    const phonePage = await context.newPage();
+    await phonePage.goto(pairingUrl!);
+    await phonePage.getByRole("button", { name: "Connect" }).click();
+
+    await expect(
+        phonePage.getByText("Connected. Your phone is now the controller."),
+    ).toBeVisible({ timeout: 15_000 });
+    await expect(hostDialog.getByText("Connected", { exact: true })).toBeVisible({
+        timeout: 15_000,
+    });
+    await expect(
+        phonePage.getByRole("button", { name: "A", exact: true }),
+    ).toBeEnabled();
+    await expect(
+        phonePage.getByRole("button", { name: "L", exact: true }),
+    ).toBeEnabled();
+
+    await phonePage.close();
+});

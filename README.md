@@ -26,6 +26,7 @@ browser and are never uploaded to an application server.
 - Responsive ROM libraries with drag-and-drop import, play, and delete actions
 - Status indicators for the loaded ROM and emulator state
 - Shared Quick Menu for GBA and NES with keyboard and gamepad navigation
+- Phone Controller pairing for GBA and NES through WebRTC
 - Accessible modal focus handling and `Escape` dismissal
 
 ## Emulator Features
@@ -44,6 +45,7 @@ The JavaScript glue and WASM binary are served from `public/mgba/`.
 - Turbo shortcuts: `T`, `1`, `2`, `4`, and hold `Shift` for temporary turbo
 - Remappable keyboard controls
 - Gamepad support through the browser Gamepad API
+- Phone Controller support with QR or six-digit pairing
 - Mobile D-Pad, A/B, L/R, Start, and Select controls
 - Screenshot, cover-art capture, audio toggle, and fullscreen
 
@@ -58,6 +60,7 @@ rendered to a 256×240 canvas and audio is sent through the Web Audio API.
 - ROM reload-based reset with surfaced error handling
 - Remappable keyboard controls
 - Gamepad support with NES-specific button mapping
+- Phone Controller support with QR or six-digit pairing
 - Mobile D-Pad, A/B, Start, and Select controls
 - Screenshot, cover-art capture, audio toggle, and fullscreen
 
@@ -108,6 +111,37 @@ The shared `EmulatorCore` interface contains the minimal `status`, `press`, and
 
 Gameplay input is suspended while the Quick Menu, Settings, or a confirmation
 dialog is open.
+
+### Phone Controller
+
+GBA and NES can use another phone or browser tab as a controller:
+
+1. Open **Quick Menu → Phone Controller** on the emulator.
+2. Scan the QR code or open `/controller` and enter the six-digit code.
+3. After the WebRTC DataChannel connects, button events travel directly between
+   the phone and emulator.
+
+The Next.js API stores only the temporary WebRTC offer/answer used for pairing.
+Sessions expire after 10 minutes and are deleted when pairing completes or the
+host disconnects. ROMs, save states, and gameplay input are not relayed through
+the signaling API. Pairing creation and code lookup are rate limited.
+
+Production deployments use Upstash Redis so the temporary session is available
+across Vercel Function instances. Connect an Upstash Redis database through the
+Vercel Marketplace and expose:
+
+```text
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+```
+
+The legacy `KV_REST_API_URL` and `KV_REST_API_TOKEN` names are also accepted.
+Local development falls back to an in-memory store when Redis is not configured.
+On Vercel, a missing or partial Redis configuration returns `503` instead of
+silently using unreliable instance memory.
+
+The first version targets devices on the same local network. DS is not supported
+because it runs inside a separate sandboxed iframe.
 
 ### Storage
 

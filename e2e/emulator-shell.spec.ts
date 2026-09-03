@@ -85,12 +85,43 @@ for (const system of systems) {
             await expect(dialog).toBeHidden();
         } else {
             const fullscreenButtons = page.getByRole("button", { name: "Fullscreen" });
-            await expect(fullscreenButtons).toHaveCount(2);
-            for (const button of await fullscreenButtons.all()) {
-                await expect(button).toBeDisabled();
-            }
+            await expect(fullscreenButtons).toHaveCount(1);
+            await expect(fullscreenButtons).toBeDisabled();
+            await expect(page.getByRole("button", { name: "Restart" })).toBeDisabled();
         }
 
         expect(renderingErrors).toEqual([]);
     });
 }
+
+test("Nintendo DS can retry a failed CDN load without selecting the ROM again", async ({
+    page,
+}) => {
+    let loaderRequests = 0;
+    await page.route("https://cdn.emulatorjs.org/**/loader.js", async (route) => {
+        loaderRequests += 1;
+        await route.fulfill({
+            contentType: "application/javascript",
+            headers: {
+                "Access-Control-Allow-Origin": "*",
+                "Cross-Origin-Resource-Policy": "cross-origin",
+            },
+            body: 'throw new Error("Mock CDN failure");',
+        });
+    });
+
+    await page.goto("/ds");
+    await page.locator('input[type="file"][accept=".nds"]').setInputFiles({
+        name: "retry-test.nds",
+        mimeType: "application/octet-stream",
+        buffer: Buffer.from([0x4e, 0x44, 0x53]),
+    });
+
+    await expect(page.getByText("Unable to start DS emulator")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(2);
+    await page.getByRole("button", { name: "Retry" }).first().click();
+    await expect(page.getByText("Unable to start DS emulator")).toBeVisible();
+
+    expect(loaderRequests).toBeGreaterThanOrEqual(2);
+    await expect(page.locator('input[type="file"][accept=".nds"]')).toHaveCount(1);
+});

@@ -266,6 +266,7 @@ export default function DsPlayer() {
     const [iframeSrc, setIframeSrc] = useState<string | null>(null);
     const [message, setMessage] = useState("Upload a .nds ROM to begin. Emulation powered by EmulatorJS (DeSmuME).");
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
+    const [showRestartConfirm, setShowRestartConfirm] = useState(false);
     const [menuHidden, setMenuHidden] = useState(false);
     const [emulatorState, setEmulatorState] = useState<EmulatorState>("idle");
     const isOnline = useSyncExternalStore(
@@ -440,6 +441,43 @@ export default function DsPlayer() {
         [launchRom],
     );
 
+    async function reloadCurrentRom() {
+        if (!romHashState || romName === "-") {
+            setMessage("Load a ROM before restarting the emulator.");
+            return;
+        }
+        if (!isOnline) {
+            setMessage("Reconnect before retrying the DS emulator.");
+            return;
+        }
+
+        setEmulatorState("loading");
+        setMessage(`Preparing ${romName}...`);
+
+        try {
+            const bytes = await getDsRomBytes(romHashState);
+            if (!bytes) throw new Error("The ROM is no longer available in the library.");
+
+            touchDsLastPlayed(romHashState);
+            launchRom(bytes, romName);
+        } catch (error) {
+            setEmulatorState("error");
+            setMessage(
+                `Unable to restart DS emulator: ${
+                    error instanceof Error ? error.message : String(error)
+                }`,
+            );
+        }
+    }
+
+    function onRetryOrRestart() {
+        if (status === "running") {
+            setShowRestartConfirm(true);
+            return;
+        }
+        void reloadCurrentRom();
+    }
+
     function onEject() {
         revokeActiveUrls();
         if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
@@ -500,14 +538,6 @@ export default function DsPlayer() {
                                 {isOnline ? "Online" : "Offline"}
                             </span>
                             <ThemeToggle />
-                            <button
-                                type="button"
-                                onClick={onFullscreen}
-                                disabled={!iframeSrc || status === "error"}
-                                className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2.5 text-xs font-bold transition hover:border-(--accent-border) hover:bg-(--panel-2) disabled:cursor-not-allowed disabled:opacity-40"
-                            >
-                                Fullscreen
-                            </button>
                         </div>
                     </div>
                 </header>
@@ -586,6 +616,14 @@ export default function DsPlayer() {
                                 </div>
 
                                 <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={onRetryOrRestart}
+                                        disabled={!romHashState || !isOnline || status === "loading"}
+                                        className="rounded-xl border border-(--border) px-3 py-2 text-xs font-bold text-(--muted) transition hover:border-(--accent-border) hover:text-(--text) disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        {status === "error" ? "Retry" : "Restart"}
+                                    </button>
                                     <button
                                         type="button"
                                         onClick={() => setShowEjectConfirm(true)}
@@ -674,6 +712,14 @@ export default function DsPlayer() {
                                     <div>
                                         <div className="text-sm font-bold text-(--danger)">Unable to start DS emulator</div>
                                         <div className="mt-2 max-w-md text-xs text-white/55">{message}</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => void reloadCurrentRom()}
+                                            disabled={!isOnline}
+                                            className="mt-4 rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+                                        >
+                                            Retry
+                                        </button>
                                     </div>
                                 </div>
                             )}
@@ -711,6 +757,18 @@ export default function DsPlayer() {
 
                 {!menuHidden && tab === "library" && <DsRomLibrary onPlay={loadRomFromLibrary} />}
             </main>
+
+            <ConfirmDialog
+                open={showRestartConfirm}
+                title="Restart DS game"
+                message={`Restart "${romName}" from the beginning? The current DS session state may be lost.`}
+                confirmLabel="Restart"
+                onConfirm={() => {
+                    setShowRestartConfirm(false);
+                    void reloadCurrentRom();
+                }}
+                onCancel={() => setShowRestartConfirm(false)}
+            />
 
             <ConfirmDialog
                 open={showEjectConfirm}

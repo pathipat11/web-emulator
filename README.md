@@ -1,130 +1,139 @@
 # Web Emulator Lab 🎮
 
-A browser-based retro game emulator platform built with Next.js 16, React 19, and Tailwind CSS 4. All ROM processing happens entirely client-side — nothing is ever uploaded to a server.
+Web Emulator Lab is a browser-based retro game emulator built with Next.js 16,
+React 19, Tailwind CSS 4, and TypeScript. ROM files are processed locally in the
+browser and are never uploaded to an application server.
 
 ## Supported Systems
 
-| System | Status | Core | ROM Format |
+| System | Status | Core | ROM |
 | --- | --- | --- | --- |
-| Game Boy Advance | ✅ Available | mGBA (WASM) | `.gba` |
-| NES | ✅ Available | JSNES | `.nes` |
-| Nintendo DS | ✅ Available | EmulatorJS (DeSmuME) | `.nds` |
-| SNES | 🚧 Coming soon | — | — |
-| Game Boy | 🚧 Coming soon | — | — |
-| PlayStation 1 | 🚧 Coming soon | — | — |
+| Game Boy Advance | Available | mGBA (WASM) | `.gba` |
+| Nintendo NES | Available | JSNES | `.nes` |
+| Nintendo DS | Available | EmulatorJS / DeSmuME 2015 | `.nds` |
+| Super Nintendo | Coming soon | — | `.sfc` |
+| Game Boy | Coming soon | — | `.gb` |
+| PlayStation | Coming soon | — | `.cue` |
 
-## Features
+## Current UI
 
-### GBA Emulator
+- RetroArch-inspired system browser and player layouts
+- Dark and light themes; the selected theme is stored in localStorage and
+  defaults to dark
+- Player and Library tabs for every available system
+- Focus mode on every player; press `F2` to hide or restore the interface
+- Responsive ROM libraries with drag-and-drop import, play, and delete actions
+- Status indicators for the loaded ROM and emulator state
+- Shared Quick Menu for GBA and NES with keyboard and gamepad navigation
+- Accessible modal focus handling and `Escape` dismissal
 
-Powered by [mGBA](https://mgba.io/) compiled to WebAssembly via `@thenick775/mgba-wasm`. The WASM binary and JS glue are served from `public/mgba/` and loaded at runtime through a dynamic ESM/script loader.
+## Emulator Features
 
-- Upload `.gba` ROMs and play instantly
-- ROM Library with persistent storage, cover art thumbnails, drag-and-drop import, and delete
-- 3 save state slots with auto-save on page close (`pagehide` / `visibilitychange`) and auto-load on ROM open
-- Turbo Mode (1x / 2x / 4x) with keyboard shortcuts: `T` to cycle, `1`/`2`/`4` for direct set, hold `Shift` for temporary turbo
-- Turbo toast notifications on speed changes
-- Remappable keyboard controls via the Keymap Editor in Settings
-- Gamepad support via the Gamepad API with analog stick deadzone handling
-- Mobile touch controls (D-Pad, A/B, L/R shoulders, Start/Select) — hidden on large screens
-- Screenshot capture (also sets ROM cover art)
-- Fullscreen mode
-- Audio toggle
-- Hide/show all UI chrome with `F2` (or the floating toggle button) for a distraction-free, centered screen
+### Game Boy Advance
 
-### NES Emulator
+The GBA player wraps `@thenick775/mgba-wasm` behind the typed `GbaCore` adapter.
+The JavaScript glue and WASM binary are served from `public/mgba/`.
 
-Powered by [JSNES](https://github.com/bfirsh/jsnes), a JavaScript NES emulator. The core runs a `requestAnimationFrame` loop, rendering each frame to a 256×240 canvas and piping audio samples through a `ScriptProcessorNode`.
+- Persistent ROM library backed by IndexedDB
+- Three portable save-state slots stored as raw bytes in IndexedDB
+- Optional auto-save every 30 seconds and when the page becomes hidden
+- Automatic save-state load from the selected slot when opening a ROM
+- Clean ROM reset without restoring mGBA's separate internal auto state
+- Turbo speeds: 1x, 2x, and 4x
+- Turbo shortcuts: `T`, `1`, `2`, `4`, and hold `Shift` for temporary turbo
+- Remappable keyboard controls
+- Gamepad support through the browser Gamepad API
+- Mobile D-Pad, A/B, L/R, Start, and Select controls
+- Screenshot, cover-art capture, audio toggle, and fullscreen
 
-- Upload `.nes` ROMs and play instantly
-- Separate NES ROM Library (IndexedDB), independent from GBA
-- 3 save state slots (JSON-serialized emulator state stored in IndexedDB) with auto-save on page close
-- Remappable keyboard controls via the NES Keymap Editor
-- Gamepad support with NES-specific button mapping (no L/R shoulders)
-- Mobile touch controls (D-Pad, A/B, Start/Select)
-- Screenshot capture with cover art
-- Fullscreen mode
-- Audio toggle with Web Audio API (`AudioContext` + `ScriptProcessorNode`)
+### Nintendo NES
 
-### Nintendo DS Emulator
+The NES player wraps JSNES behind the typed `NesCore` adapter. Frames are
+rendered to a 256×240 canvas and audio is sent through the Web Audio API.
 
-Powered by [EmulatorJS](https://emulatorjs.org/) using the DeSmuME 2015 core. Unlike GBA and NES which use custom core adapters, the DS emulator runs EmulatorJS inside a sandboxed `<iframe>`. The ROM is passed as a Blob URL, and EmulatorJS handles rendering, input, audio, and save states internally.
+- Independent IndexedDB ROM library
+- Three save-state slots stored as JSON in IndexedDB
+- Optional auto-save every 30 seconds and when the page becomes hidden
+- ROM reload-based reset with surfaced error handling
+- Remappable keyboard controls
+- Gamepad support with NES-specific button mapping
+- Mobile D-Pad, A/B, Start, and Select controls
+- Screenshot, cover-art capture, audio toggle, and fullscreen
 
-- Upload `.nds` ROMs and play instantly
-- Separate DS ROM Library (IndexedDB + localStorage)
-- EmulatorJS provides built-in controls: keyboard, gamepad, and on-screen touch buttons
-- EmulatorJS built-in save state management via its own toolbar
-- Fullscreen mode
-- Eject ROM to return to idle state
+### Nintendo DS
 
-### Shared Features
+The DS player runs EmulatorJS 4.2.3 with the DeSmuME 2015 core inside a
+sandboxed iframe. EmulatorJS assets are downloaded from `cdn.emulatorjs.org`
+when a ROM is launched.
 
-- Home page with a system selection card grid — each system shows its availability status
-- Dark / Light theme toggle with system preference detection, applied via a blocking `<script>` to prevent flash
-- Responsive layout for desktop and mobile
-- Settings panel slides in as a modal drawer (dismissible with `Escape`) — GBA and NES
-- Confirm dialogs for destructive actions (eject ROM, delete from library)
-- Distraction-free mode: press `F2` (or the floating toggle) to hide all UI chrome and center the screen — available on all three players
+- Independent IndexedDB ROM library
+- Keyboard, gamepad, and touch controls provided by EmulatorJS
+- Nonce-based iframe Content Security Policy
+- Opaque sandbox origin without `allow-same-origin`
+- In-memory storage compatibility shim with EmulatorJS database and
+  localStorage persistence disabled
+- Frame handshake, startup timeout, and surfaced load errors
+- Retry after CDN or startup failure using the ROM already stored in IndexedDB
+- Restart the current ROM without selecting the file again
+- Fullscreen and eject controls
+
+DS emulation requires an internet connection. Persistent DS save states are
+currently disabled inside the restricted iframe.
 
 ## Architecture
 
-### Emulator Core Adapters
+### Core Adapters
 
-Each system uses a different emulation strategy:
+- `src/lib/gba/core-adapter.ts` wraps the mGBA WASM module, virtual filesystem,
+  input, save states, audio, reset, and turbo behavior.
+- `src/lib/nes/core-adapter.ts` wraps JSNES, its frame loop, canvas output,
+  audio, input, reset, and serialized state.
+- DS intentionally has no custom core adapter. `DsPlayer` creates the isolated
+  EmulatorJS document and communicates with it through `postMessage`.
 
-- **GBA** — `GbaCore` (`src/lib/gba/core-adapter.ts`) wraps the mGBA WASM Module, handling ROM loading via a virtual filesystem, button mapping, save states, audio control, and turbo speed. Includes a stub core for UI development.
-- **NES** — `NesCore` (`src/lib/nes/core-adapter.ts`) wraps JSNES, converting ROM bytes to the string format JSNES expects, managing the frame loop, rendering pixel data to canvas via `ImageData`, and handling audio through `ScriptProcessorNode`.
-- **DS** — No custom core adapter. The `DsPlayer` component generates an HTML document that loads EmulatorJS from CDN (`cdn.emulatorjs.org`), passes the ROM as a Blob URL, and renders it in an `<iframe>`. EmulatorJS handles all emulation internally.
+The shared `EmulatorCore` interface contains the minimal `status`, `press`, and
+`release` contract used by generic input hooks.
 
-### Input System
+### Shared Input and Modal Hooks
 
-GBA and NES each define their own button type, default keymap, and gamepad mapping:
+- `useKeymap<B>` persists remappable keyboard mappings in localStorage.
+- `useKeyboardInput<B>` maps keyboard events to a compatible emulator core.
+- `useGamepadInput<B>` polls the Gamepad API with axis deadzone handling and
+  releases held buttons when input is suspended or a controller disconnects.
+- `useGamepadMenuNavigation` supports D-Pad/analog navigation, A to select, and
+  B to close menus.
+- `useModalDialog` manages initial focus, focus trapping, scroll locking, and
+  focus restoration.
 
-- GBA: `A`, `B`, `L`, `R`, `START`, `SELECT`, `UP`, `DOWN`, `LEFT`, `RIGHT`
-- NES: `A`, `B`, `START`, `SELECT`, `UP`, `DOWN`, `LEFT`, `RIGHT` (no shoulder buttons)
-- DS: Input handled entirely by EmulatorJS inside the iframe
+Gameplay input is suspended while the Quick Menu, Settings, or a confirmation
+dialog is open.
 
-Input is handled through shared, generic React hooks parameterized by each system's
-button type (`B`) — there are no per-system copies:
+### Storage
 
-- `useKeyboardInput<B>(coreRef, keymap)` — keyboard event listeners mapped through the active keymap
-- `useGamepadInput<B>(coreRef, mapping, setInfo)` — Gamepad API polling via `requestAnimationFrame` with button and axis support
-- `useKeymap<B>(storageKey, defaults)` — remappable keymap state persisted to localStorage
+ROM bytes and GBA/NES save states live in IndexedDB. localStorage is used only
+for small synchronous data such as ROM metadata lists, keymaps, and theme.
 
-The hooks depend only on the minimal `EmulatorCore` interface (`status`, `press`,
-`release`) and the generic `GamepadMapping<B>` shape, both defined in
-`src/lib/emulator-core.ts`. This is what lets GBA and NES (and future systems) share the
-exact same input code.
+| System | ROM database | Save-state database |
+| --- | --- | --- |
+| GBA | `gba_rom_library` | `gba_save_states` |
+| NES | `nes_rom_library` | `nes_save_states` |
+| DS | `ds_rom_library` | Disabled in the sandboxed player |
 
-### Storage Layer
+ROM stores are created through `createRomStore(dbName, metaListKey)`. ROMs use
+the first 16 hexadecimal characters of a SHA-256 hash as their deduplication
+key. Save-state APIs are asynchronous and must be awaited.
 
-ROM bytes and save states both live in IndexedDB (no practical size limits). localStorage
-is used only for fast synchronous reads of ROM metadata lists, keymaps, and theme. Each
-system has its own isolated storage:
+### Browser Security Requirements
 
-| System | ROM Store | Save State Store | ROM IndexedDB | Save IndexedDB |
-| --- | --- | --- | --- | --- |
-| GBA | `romStore.ts` | `saveStateStore.ts` | `gba_rom_library` | `gba_save_states` |
-| NES | `nesRomStore.ts` | `nesSaveStateStore.ts` | `nes_rom_library` | `nes_save_states` |
-| DS | `dsRomStore.ts` | (managed by EmulatorJS) | `ds_rom_library` | — |
+`next.config.ts` sends these headers on every route:
 
-- ROM stores are built from the shared `createRomStore(dbName, metaListKey)` factory in `createRomStore.ts`
-- Each ROM is identified by a SHA-256 hash (first 16 hex chars, via `lib/hashRom.ts`) to deduplicate
-- Save-state store functions are **async** (they return Promises) — callers must `await` them
-- GBA save states: raw bytes in IndexedDB
-- NES save states: JSON-serialized emulator state in IndexedDB
-- DS save states: managed internally by EmulatorJS
+```text
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
 
-## Tech Stack
-
-- **Framework:** Next.js 16 (App Router)
-- **UI:** React 19, Tailwind CSS 4
-- **GBA Emulation:** mGBA WASM (`@thenick775/mgba-wasm`)
-- **NES Emulation:** JSNES (`jsnes`)
-- **DS Emulation:** EmulatorJS + DeSmuME 2015 (loaded from CDN)
-- **Storage:** IndexedDB (ROM bytes & save states), localStorage (settings, keymaps, ROM metadata, theme)
-- **Language:** TypeScript
-- **Fonts:** Geist Sans & Geist Mono (via `next/font`)
+They are required for the threaded mGBA WASM runtime and `SharedArrayBuffer`.
+Do not remove them without replacing the mGBA runtime strategy.
 
 ## Getting Started
 
@@ -133,117 +142,60 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000), pick a system, and upload a ROM to start playing.
+Open `http://localhost:3000`, choose a system, and load a ROM that you are
+legally entitled to use.
 
-## Project Structure
+The DS player additionally needs access to `cdn.emulatorjs.org`.
 
-```
-src/
-├── app/
-│   ├── layout.tsx              # Root layout (fonts, theme script, toast provider)
-│   ├── page.tsx                # Home — system selection grid
-│   ├── globals.css             # Global styles & CSS variables
-│   ├── gba/page.tsx            # GBA emulator page
-│   ├── nes/page.tsx            # NES emulator page
-│   └── ds/page.tsx             # DS emulator page
-│
-├── components/
-│   ├── SystemCard.tsx          # System card (image, status badge, link)
-│   ├── ThemeToggle.tsx         # Dark/Light switch
-│   ├── ThemeScript.tsx         # Blocking script to apply theme before paint
-│   │
-│   ├── gba/
-│   │   ├── GbaPlayer.tsx       # GBA emulator orchestrator
-│   │   ├── GbaConsole.tsx      # Canvas wrapper (4:3 aspect, scanlines, glow)
-│   │   ├── RomLibrary.tsx      # ROM list with play/delete
-│   │   ├── RomDropzone.tsx     # Drag-and-drop ROM import
-│   │   ├── SettingsPanel.tsx   # Settings drawer (turbo, save, keymap)
-│   │   ├── KeymapEditor.tsx    # Keyboard rebinding UI
-│   │   ├── MobileControls.tsx  # Touch buttons (D-Pad, A/B, L/R, Start/Select)
-│   │   ├── TouchControls.tsx   # Touch control utilities
-│   │   ├── KeyboardHints.tsx   # Keyboard shortcut reference
-│   │   ├── TurboControl.tsx    # Turbo speed selector
-│   │   ├── TurboToastProvider.tsx  # Turbo change notification context
-│   │   └── ConfirmDialog.tsx   # Confirmation modal
-│   │
-│   ├── nes/
-│   │   ├── NesPlayer.tsx       # NES emulator orchestrator
-│   │   ├── NesConsole.tsx      # Canvas wrapper (256×240, scanlines)
-│   │   ├── NesRomLibrary.tsx   # NES ROM list
-│   │   ├── NesRomDropzone.tsx  # NES drag-and-drop import
-│   │   ├── NesSettingsPanel.tsx    # NES settings drawer (save, keymap)
-│   │   ├── NesKeymapEditor.tsx # NES keyboard rebinding UI
-│   │   ├── MobileControls.tsx  # NES touch buttons (no shoulders)
-│   │   └── ConfirmDialog.tsx   # Confirmation modal
-│   │
-│   └── ds/
-│       ├── DsPlayer.tsx        # DS emulator (iframe + EmulatorJS)
-│       ├── DsRomLibrary.tsx    # DS ROM list
-│       ├── DsRomDropzone.tsx   # DS drag-and-drop import
-│       └── ConfirmDialog.tsx   # Confirmation modal
-│
-└── lib/
-    ├── input.ts                # GBA button type & default keymap
-    ├── gamepad.ts              # GBA gamepad mapping
-    ├── emulator-core.ts        # Shared EmulatorCore interface & GamepadMapping shape
-    ├── hashRom.ts              # Shared SHA-256 ROM hashing helper
-    ├── storage.ts              # Generic IndexedDB helpers
-    │
-    ├── gba/
-    │   ├── core-adapter.ts     # GbaCore interface & mGBA WASM adapter
-    │   ├── mgba-loader.ts      # Dynamic mGBA JS/WASM loader
-    │   └── mgba-runtime.ts     # (reserved)
-    │
-    ├── nes/
-    │   ├── core-adapter.ts     # NesCore interface & JSNES adapter
-    │   ├── input.ts            # NES button type & default keymap
-    │   └── gamepad.ts          # NES gamepad mapping
-    │
-    ├── hooks/
-    │   ├── useKeyboardInput.ts     # Generic keyboard → core (any system)
-    │   ├── useGamepadInput.ts      # Generic gamepad → core (any system)
-    │   ├── useKeymap.ts            # Generic remappable keymap (localStorage)
-    │   ├── useTurbo.ts             # GBA turbo state → core
-    │   ├── useTurboShortcuts.ts    # GBA turbo keyboard shortcuts
-    │   ├── useAutoSaveOnClose.ts   # GBA auto-save on page hide
-    │   └── useNesAutoSaveOnClose.ts # NES auto-save on page hide
-    │
-    └── storage/
-        ├── createRomStore.ts       # Generic ROM library factory (IDB + localStorage)
-        ├── romStore.ts             # GBA ROM library
-        ├── saveStateStore.ts       # GBA save states (IndexedDB, raw bytes)
-        ├── nesRomStore.ts          # NES ROM library
-        ├── nesSaveStateStore.ts    # NES save states (IndexedDB, JSON)
-        └── dsRomStore.ts           # DS ROM library
-
-public/
-├── images/          # System card images
-└── mgba/
-    ├── mgba.js      # mGBA JavaScript glue
-    └── mgba.wasm    # mGBA WebAssembly binary
-```
-
-## Scripts
+## Commands
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start development server |
-| `npm run build` | Production build |
-| `npm run start` | Serve production build |
+| `npm run dev` | Start the development server |
+| `npm run build` | Create a production build and type-check the app |
+| `npm run start` | Serve an existing production build |
 | `npm run lint` | Run ESLint |
-| `npm test` | Run the Vitest suite once |
+| `npm test` | Run the Vitest unit suite once |
 | `npm run test:watch` | Run Vitest in watch mode |
+| `npm run test:e2e` | Build the app and run Playwright E2E tests |
 
-Tests use jsdom for browser input hooks and mocked emulator/storage boundaries.
-GitHub Actions runs lint, tests, and the production build on every push and pull
-request.
+The Playwright suite covers GBA, NES, and DS on desktop and mobile Chromium. It
+checks primary navigation, Focus mode, Quick Menu behavior, hydration/script
+warnings, and DS retry behavior after a simulated CDN failure.
 
-## Contributing
+GitHub Actions runs lint, unit tests, installs Chromium, builds the application,
+and runs the E2E suite on every push and pull request.
 
-Working in this repo (human or AI agent)? Start with [`AGENTS.md`](./AGENTS.md) for
-conventions, architecture, and gotchas. To add a new emulator system, follow the
-step-by-step skill at
-[`.agents/skills/add-emulator-system/SKILL.md`](./.agents/skills/add-emulator-system/SKILL.md).
+## Project Structure
+
+```text
+src/
+├── app/                    # App Router pages, root layout, and theme tokens
+├── components/
+│   ├── shell/              # Shared home-page shell
+│   ├── emulator/           # Shared Quick Menu
+│   ├── gba/                # GBA player, console, library, controls, settings
+│   ├── nes/                # NES player, console, library, controls, settings
+│   └── ds/                 # Sandboxed DS player and ROM library
+└── lib/
+    ├── gba/                # mGBA adapter and loader
+    ├── nes/                # JSNES adapter and input mapping
+    ├── hooks/              # Shared input, modal, turbo, and auto-save hooks
+    ├── storage/            # ROM and save-state IndexedDB stores
+    ├── emulator-core.ts    # Shared emulator/input contracts
+    └── hashRom.ts          # Shared SHA-256 ROM hashing
+
+e2e/                        # Playwright desktop/mobile tests
+public/mgba/                # Same-origin mGBA JavaScript and WASM assets
+.github/workflows/ci.yml    # Lint, unit, build, and E2E CI
+```
+
+## Adding Another System
+
+Read [`AGENTS.md`](./AGENTS.md) before changing the repository. New emulator
+systems should follow
+[`.agents/skills/add-emulator-system/SKILL.md`](./.agents/skills/add-emulator-system/SKILL.md)
+so they reuse the generic input hooks and ROM storage factory.
 
 ## Repository
 

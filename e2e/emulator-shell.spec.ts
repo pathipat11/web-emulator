@@ -50,6 +50,24 @@ function collectRenderingErrors(page: Page) {
     return errors;
 }
 
+test("home lists PlayStation Portable as a disabled future system", async ({
+    page,
+}) => {
+    await page.goto("/");
+
+    const pspCard = page
+        .getByRole("article")
+        .filter({ hasText: "PlayStation Portable" });
+    await expect(pspCard).toBeVisible();
+    await expect(pspCard.getByText("PPSSPP", { exact: true })).toBeVisible();
+    await expect(pspCard.getByText("Coming soon")).toBeVisible();
+    await expect(pspCard.getByText("Unavailable")).toBeVisible();
+    await expect(pspCard.getByRole("link")).toHaveCount(0);
+    const pspImage = pspCard.locator("img");
+    await expect(pspImage).toHaveCount(1);
+    await expect(pspImage).toHaveAttribute("src", /\/images\/psp\.jpg$/);
+});
+
 for (const system of systems) {
     test(`${system.heading} shell supports its primary navigation`, async ({ page }) => {
         const renderingErrors = collectRenderingErrors(page);

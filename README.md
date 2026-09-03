@@ -14,6 +14,7 @@ browser and are never uploaded to an application server.
 | Super Nintendo | Coming soon | — | `.sfc` |
 | Game Boy | Coming soon | — | `.gb` |
 | PlayStation | Coming soon | — | `.cue` |
+| PlayStation Portable | Coming soon | PPSSPP | `.iso` |
 
 ## Current UI
 

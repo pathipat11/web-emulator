@@ -25,10 +25,13 @@ npm run dev      # Start dev server (do NOT run in agent automation — it block
 npm run build    # Production build — use this to verify changes compile
 npm run start    # Serve production build
 npm run lint     # ESLint
+npm test         # Run the Vitest suite once
+npm run test:watch # Run Vitest in watch mode
 ```
 
 **Always run `npm run build` after making changes** to verify TypeScript and the
-production bundle are clean. There is no test suite in this project.
+production bundle are clean. Run `npm test` for changes that touch shared hooks,
+ROM hashing, or emulator-core/save-state behavior.
 
 ## Conventions
 

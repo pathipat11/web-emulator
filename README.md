@@ -231,6 +231,12 @@ public/
 | `npm run build` | Production build |
 | `npm run start` | Serve production build |
 | `npm run lint` | Run ESLint |
+| `npm test` | Run the Vitest suite once |
+| `npm run test:watch` | Run Vitest in watch mode |
+
+Tests use jsdom for browser input hooks and mocked emulator/storage boundaries.
+GitHub Actions runs lint, tests, and the production build on every push and pull
+request.
 
 ## Contributing
 

@@ -163,11 +163,12 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     expect(pairingUrl).toBeTruthy();
 
     const phonePage = await context.newPage();
+    await phonePage.setViewportSize({ width: 844, height: 390 });
     await phonePage.goto(pairingUrl!);
     await phonePage.getByRole("button", { name: "Connect" }).click();
 
     await expect(
-        phonePage.getByText("Connected. Your phone is now the controller."),
+        phonePage.getByText("Your phone is now the controller."),
     ).toBeVisible({ timeout: 15_000 });
     await expect(hostDialog.getByText("Connected", { exact: true })).toBeVisible({
         timeout: 15_000,
@@ -178,6 +179,20 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     await expect(
         phonePage.getByRole("button", { name: "L", exact: true }),
     ).toBeEnabled();
+    const joystick = phonePage.getByRole("application", {
+        name: "Virtual joystick",
+    });
+    await expect(joystick).toHaveAttribute("aria-disabled", "false");
+    await expect(phonePage.getByRole("button", { name: "Up" })).toHaveCount(0);
+
+    const controllerBounds = await phonePage
+        .getByRole("region", { name: "Virtual controller" })
+        .boundingBox();
+    expect(controllerBounds).not.toBeNull();
+    expect(controllerBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(controllerBounds!.y).toBeGreaterThanOrEqual(0);
+    expect(controllerBounds!.x + controllerBounds!.width).toBeLessThanOrEqual(844);
+    expect(controllerBounds!.y + controllerBounds!.height).toBeLessThanOrEqual(390);
 
     await phonePage.close();
 });

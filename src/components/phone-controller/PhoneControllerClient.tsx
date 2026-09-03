@@ -48,8 +48,8 @@ function ControllerButton({
             className={[
                 "touch-none select-none border border-(--border) bg-(--panel-2) font-black text-(--text) shadow-(--shadow) transition active:scale-95 active:border-(--accent-border) active:bg-(--accent) active:text-(--accent-text) disabled:opacity-40",
                 round
-                    ? "grid h-20 w-20 place-items-center rounded-full text-xl"
-                    : "min-h-13 rounded-xl px-4 text-xs",
+                    ? "grid h-[clamp(3.75rem,18vw,7rem)] w-[clamp(3.75rem,18vw,7rem)] place-items-center rounded-full text-xl landscape:h-[clamp(4.5rem,22vmin,7rem)] landscape:w-[clamp(4.5rem,22vmin,7rem)]"
+                    : "min-h-10 rounded-xl px-3 text-xs sm:min-h-11 sm:px-4",
             ].join(" ")}
             onContextMenu={(event) => event.preventDefault()}
             onPointerDown={(event) => {
@@ -67,6 +67,138 @@ function ControllerButton({
         >
             {label}
         </button>
+    );
+}
+
+const JOYSTICK_DIRECTIONS = ["UP", "DOWN", "LEFT", "RIGHT"] as const;
+
+function VirtualJoystick({
+    onPress,
+    onRelease,
+    disabled,
+}: {
+    onPress: (button: string) => void;
+    onRelease: (button: string) => void;
+    disabled: boolean;
+}) {
+    const [position, setPosition] = useState({ x: 0, y: 0 });
+    const activeDirectionsRef = useRef(new Set<string>());
+
+    const releaseDirections = useCallback(() => {
+        for (const direction of activeDirectionsRef.current) {
+            onRelease(direction);
+        }
+        activeDirectionsRef.current.clear();
+        setPosition({ x: 0, y: 0 });
+    }, [onRelease]);
+
+    const updateJoystick = useCallback(
+        (
+            clientX: number,
+            clientY: number,
+            element: HTMLDivElement,
+        ) => {
+            const rect = element.getBoundingClientRect();
+            const rawX = clientX - (rect.left + rect.width / 2);
+            const rawY = clientY - (rect.top + rect.height / 2);
+            const maxDistance = Math.min(rect.width, rect.height) * 0.3;
+            const distance = Math.hypot(rawX, rawY);
+            const scale = distance > maxDistance ? maxDistance / distance : 1;
+            const x = rawX * scale;
+            const y = rawY * scale;
+            const normalizedX = x / maxDistance;
+            const normalizedY = y / maxDistance;
+            const deadzone = 0.28;
+            const nextDirections = new Set<string>();
+
+            if (normalizedX < -deadzone) nextDirections.add("LEFT");
+            if (normalizedX > deadzone) nextDirections.add("RIGHT");
+            if (normalizedY < -deadzone) nextDirections.add("UP");
+            if (normalizedY > deadzone) nextDirections.add("DOWN");
+
+            for (const direction of activeDirectionsRef.current) {
+                if (!nextDirections.has(direction)) onRelease(direction);
+            }
+            for (const direction of nextDirections) {
+                if (!activeDirectionsRef.current.has(direction)) onPress(direction);
+            }
+
+            activeDirectionsRef.current = nextDirections;
+            setPosition({ x, y });
+        },
+        [onPress, onRelease],
+    );
+
+    return (
+        <div
+            role="application"
+            aria-label="Virtual joystick"
+            aria-disabled={disabled}
+            className={[
+                "relative aspect-square w-[clamp(7rem,32vw,12rem)] touch-none select-none rounded-full border border-(--border) bg-(--panel-2) shadow-(--shadow) transition landscape:w-[clamp(8rem,44vmin,12rem)]",
+                disabled ? "opacity-40" : "",
+            ].join(" ")}
+            onContextMenu={(event) => event.preventDefault()}
+            onPointerDown={(event) => {
+                if (disabled) return;
+                event.preventDefault();
+                event.currentTarget.setPointerCapture(event.pointerId);
+                updateJoystick(
+                    event.clientX,
+                    event.clientY,
+                    event.currentTarget,
+                );
+                navigator.vibrate?.(8);
+            }}
+            onPointerMove={(event) => {
+                if (
+                    disabled ||
+                    !event.currentTarget.hasPointerCapture(event.pointerId)
+                ) return;
+                event.preventDefault();
+                updateJoystick(
+                    event.clientX,
+                    event.clientY,
+                    event.currentTarget,
+                );
+            }}
+            onPointerUp={(event) => {
+                event.preventDefault();
+                releaseDirections();
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                }
+            }}
+            onPointerCancel={releaseDirections}
+            onLostPointerCapture={releaseDirections}
+        >
+            <div className="absolute inset-[12%] rounded-full border border-(--border) bg-(--panel-3)" />
+            {JOYSTICK_DIRECTIONS.map((direction) => (
+                <span
+                    key={direction}
+                    aria-hidden="true"
+                    className={[
+                        "absolute h-1.5 w-1.5 rounded-full bg-(--muted)",
+                        direction === "UP"
+                            ? "left-1/2 top-[8%] -translate-x-1/2"
+                            : direction === "DOWN"
+                                ? "bottom-[8%] left-1/2 -translate-x-1/2"
+                                : direction === "LEFT"
+                                    ? "left-[8%] top-1/2 -translate-y-1/2"
+                                    : "right-[8%] top-1/2 -translate-y-1/2",
+                    ].join(" ")}
+                />
+            ))}
+            <div
+                aria-hidden="true"
+                className="absolute left-1/2 top-1/2 grid h-[42%] w-[42%] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-(--accent-border) bg-(--accent) shadow-(--shadow-2) transition-transform duration-75"
+                style={{
+                    transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
+                }}
+            >
+                <span className="h-[34%] w-[34%] rounded-full bg-(--accent-text)/35" />
+            </div>
+        </div>
     );
 }
 
@@ -246,81 +378,110 @@ export default function PhoneControllerClient({
     const hasShoulders = system === "gba";
 
     return (
-        <main className="min-h-dvh bg-(--bg) px-4 py-5 text-(--text)">
-            <div className="mx-auto flex min-h-[calc(100dvh-2.5rem)] w-full max-w-lg flex-col">
-                <header className="flex items-center justify-between gap-4">
+        <main className="h-dvh overflow-hidden bg-(--bg) p-2 text-(--text) sm:p-3">
+            <div className="mx-auto flex h-full w-full max-w-6xl flex-col">
+                <header className="flex shrink-0 items-center justify-between gap-4 px-1">
                     <div>
                         <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
                             Web Emulator Lab
                         </div>
-                        <h1 className="mt-1 text-xl font-black">Phone Controller</h1>
+                        <h1 className="text-base font-black sm:text-lg">
+                            Phone Controller
+                        </h1>
                     </div>
                     <Link
                         href="/"
-                        className="rounded-xl border border-(--border) px-3 py-2 text-xs font-bold text-(--muted)"
+                        className="rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted)"
                     >
                         Systems
                     </Link>
                 </header>
 
-                <section className="mt-5 rounded-2xl border border-(--border) bg-(--panel) p-4">
-                    <label
-                        htmlFor="pairing-code"
-                        className="text-[10px] font-black uppercase tracking-[0.16em] text-(--muted)"
-                    >
-                        Pairing code
-                    </label>
-                    <div className="mt-2 flex gap-2">
-                        <input
-                            id="pairing-code"
-                            value={code}
-                            onChange={(event) => {
-                                setCode(event.target.value.replace(/\D/g, "").slice(0, 6));
-                            }}
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            pattern="[0-9]*"
-                            maxLength={6}
-                            disabled={status === "connecting" || status === "waiting" || connected}
-                            className="min-w-0 flex-1 rounded-xl border border-(--border) bg-(--panel-2) px-4 py-3 text-center font-mono text-xl font-black tracking-[0.2em]"
-                            placeholder="000000"
-                        />
-                        {connected ? (
+                <section className="mt-2 shrink-0 rounded-xl border border-(--border) bg-(--panel) p-2 sm:px-3">
+                    {connected ? (
+                        <div className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                    <span className="h-2 w-2 rounded-full bg-(--success)" />
+                                    <span className="text-xs font-black text-(--success)">
+                                        Connected
+                                    </span>
+                                    {system && (
+                                        <span className="rounded-md bg-(--panel-2) px-2 py-0.5 text-[10px] font-black uppercase text-(--accent)">
+                                            {system}
+                                        </span>
+                                    )}
+                                </div>
+                                <p className="truncate text-[10px] text-(--muted)">
+                                    Your phone is now the controller.
+                                </p>
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => disconnect(true)}
-                                className="rounded-xl border border-(--danger) px-4 py-2 text-xs font-bold text-(--danger)"
+                                className="shrink-0 rounded-lg border border-(--danger) px-3 py-1.5 text-xs font-bold text-(--danger)"
                             >
                                 Disconnect
                             </button>
-                        ) : (
+                        </div>
+                    ) : (
+                        <div className="flex items-end gap-2">
+                            <label
+                                htmlFor="pairing-code"
+                                className="min-w-0 flex-1 text-[9px] font-black uppercase tracking-[0.16em] text-(--muted)"
+                            >
+                                Pairing code
+                                <input
+                                    id="pairing-code"
+                                    value={code}
+                                    onChange={(event) => {
+                                        setCode(
+                                            event.target.value
+                                                .replace(/\D/g, "")
+                                                .slice(0, 6),
+                                        );
+                                    }}
+                                    inputMode="numeric"
+                                    autoComplete="one-time-code"
+                                    pattern="[0-9]*"
+                                    maxLength={6}
+                                    disabled={
+                                        status === "connecting" ||
+                                        status === "waiting"
+                                    }
+                                    className="mt-1 w-full rounded-lg border border-(--border) bg-(--panel-2) px-3 py-1.5 text-center font-mono text-base font-black tracking-[0.18em]"
+                                    placeholder="000000"
+                                />
+                            </label>
                             <button
                                 type="button"
                                 onClick={() => void connect()}
-                                disabled={status === "connecting" || status === "waiting"}
-                                className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) disabled:opacity-40"
+                                disabled={
+                                    status === "connecting" ||
+                                    status === "waiting"
+                                }
+                                className="rounded-lg bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) disabled:opacity-40"
                             >
                                 Connect
                             </button>
-                        )}
-                    </div>
-                    <div className="mt-3 flex items-center justify-between gap-3 text-xs">
-                        <span className="text-(--muted)" role="status">{message}</span>
-                        {system && (
-                            <span className="shrink-0 rounded-lg bg-(--panel-2) px-2 py-1 font-black uppercase text-(--accent)">
-                                {system}
+                            <span className="hidden min-w-0 flex-1 truncate text-[10px] text-(--muted) sm:block" role="status">
+                                {message}
                             </span>
-                        )}
-                    </div>
+                        </div>
+                    )}
                 </section>
 
                 <section
-                    className="mt-5 flex flex-1 flex-col justify-between rounded-3xl border border-(--border) bg-(--panel) p-4 sm:p-6"
+                    className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border) bg-(--panel) p-2 sm:p-3"
                     aria-label="Virtual controller"
                 >
-                    <div className="grid grid-cols-2 gap-3">
-                        {hasShoulders && (
-                            <>
+                    <p className="mb-1 text-center text-[9px] font-bold uppercase tracking-[0.12em] text-(--warning) landscape:hidden">
+                        Rotate your phone for the landscape controller
+                    </p>
+
+                    <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-[clamp(0.35rem,2.5vw,2rem)]">
+                        <div className="flex min-w-0 flex-col items-center justify-center gap-2">
+                            {hasShoulders && (
                                 <ControllerButton
                                     label="L"
                                     button="L"
@@ -328,6 +489,34 @@ export default function PhoneControllerClient({
                                     onRelease={release}
                                     disabled={!connected}
                                 />
+                            )}
+                            <VirtualJoystick
+                                key={connected ? "connected" : "disconnected"}
+                                onPress={press}
+                                onRelease={release}
+                                disabled={!connected}
+                            />
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <ControllerButton
+                                label="Select"
+                                button="SELECT"
+                                onPress={press}
+                                onRelease={release}
+                                disabled={!connected}
+                            />
+                            <ControllerButton
+                                label="Start"
+                                button="START"
+                                onPress={press}
+                                onRelease={release}
+                                disabled={!connected}
+                            />
+                        </div>
+
+                        <div className="flex min-w-0 flex-col items-center justify-center gap-2">
+                            {hasShoulders && (
                                 <ControllerButton
                                     label="R"
                                     button="R"
@@ -335,34 +524,28 @@ export default function PhoneControllerClient({
                                     onRelease={release}
                                     disabled={!connected}
                                 />
-                            </>
-                        )}
-                    </div>
-
-                    <div className="my-6 grid grid-cols-2 items-center gap-6">
-                        <div className="mx-auto grid w-full max-w-44 grid-cols-3 grid-rows-3 gap-1">
-                            <span />
-                            <ControllerButton label="Up" button="UP" onPress={press} onRelease={release} disabled={!connected} />
-                            <span />
-                            <ControllerButton label="Left" button="LEFT" onPress={press} onRelease={release} disabled={!connected} />
-                            <span className="rounded-lg bg-(--panel-3)" />
-                            <ControllerButton label="Right" button="RIGHT" onPress={press} onRelease={release} disabled={!connected} />
-                            <span />
-                            <ControllerButton label="Down" button="DOWN" onPress={press} onRelease={release} disabled={!connected} />
-                            <span />
-                        </div>
-
-                        <div className="flex items-center justify-center gap-3">
-                            <ControllerButton label="B" button="B" onPress={press} onRelease={release} disabled={!connected} round />
-                            <div className="-mt-16">
-                                <ControllerButton label="A" button="A" onPress={press} onRelease={release} disabled={!connected} round />
+                            )}
+                            <div className="flex items-center justify-center gap-[clamp(0.35rem,1.5vw,0.75rem)]">
+                                <ControllerButton
+                                    label="B"
+                                    button="B"
+                                    onPress={press}
+                                    onRelease={release}
+                                    disabled={!connected}
+                                    round
+                                />
+                                <div className="-translate-y-[18%]">
+                                    <ControllerButton
+                                        label="A"
+                                        button="A"
+                                        onPress={press}
+                                        onRelease={release}
+                                        disabled={!connected}
+                                        round
+                                    />
+                                </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div className="mx-auto grid w-full max-w-64 grid-cols-2 gap-3">
-                        <ControllerButton label="Select" button="SELECT" onPress={press} onRelease={release} disabled={!connected} />
-                        <ControllerButton label="Start" button="START" onPress={press} onRelease={release} disabled={!connected} />
                     </div>
 
                     {system && (

@@ -137,7 +137,8 @@ because those are the face buttons supported by their cores. The control layout
 is capability-based so X/Y can be added when a supported system such as SNES is
 implemented.
 
-After connecting, select **Layout** to customize the controller:
+After connecting, open the compact controller menu and select
+**Customize layout**:
 
 - Drag the joystick and each button independently.
 - Use the arrow keys to nudge a selected control; hold `Shift` for larger steps.

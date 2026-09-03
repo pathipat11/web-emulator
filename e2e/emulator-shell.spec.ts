@@ -279,9 +279,6 @@ test("a phone can pair with the GBA player through WebRTC", async ({
         .getByRole("button", { name: "Connect", exact: true })
         .click();
 
-    await expect(
-        phonePage.getByRole("button", { name: "Connected" }),
-    ).toBeVisible({ timeout: 15_000 });
     await expect(hostDialog.getByText("Connected", { exact: true })).toBeVisible({
         timeout: 15_000,
     });
@@ -336,8 +333,12 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     const controllerBounds = await controllerRegion.boundingBox();
     expect(controllerBounds).not.toBeNull();
 
-    await phonePage
-        .getByRole("button", { name: "Customize controller layout" })
+    await phonePage.getByRole("button", { name: "Open controller menu" }).click();
+    let controllerMenu = phonePage.getByRole("dialog", {
+        name: "Controller menu",
+    });
+    await controllerMenu
+        .getByRole("button", { name: "Customize layout" })
         .click();
     await expect(phonePage.getByText("Editing gba landscape")).toBeVisible();
 
@@ -390,13 +391,17 @@ test("a phone can pair with the GBA player through WebRTC", async ({
 
     await phonePage.getByRole("button", { name: "Lock layout" }).click();
     await expect(
-        phonePage.getByRole("button", { name: "Customize controller layout" }),
+        phonePage.getByRole("button", { name: "Open controller menu" }),
     ).toBeVisible();
     await expect(
         phonePage.getByRole("button", { name: "A", exact: true }),
     ).toBeEnabled();
 
-    await phonePage.getByRole("button", { name: "Connected" }).click();
+    await phonePage.getByRole("button", { name: "Open controller menu" }).click();
+    controllerMenu = phonePage.getByRole("dialog", {
+        name: "Controller menu",
+    });
+    await controllerMenu.getByRole("button", { name: /Connection/ }).click();
     const connectionDialog = phonePage.getByRole("dialog", {
         name: "Phone connection",
     });

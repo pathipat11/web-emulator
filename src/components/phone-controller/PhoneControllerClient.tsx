@@ -60,6 +60,109 @@ function getServerOrientation(): PhoneControlOrientation {
     return "landscape";
 }
 
+function ControllerMenuDialog({
+    open,
+    status,
+    system,
+    onClose,
+    onOpenConnection,
+    onEditLayout,
+}: {
+    open: boolean;
+    status: ConnectionStatus;
+    system: PhoneControllerSystem | null;
+    onClose: () => void;
+    onOpenConnection: () => void;
+    onEditLayout: () => void;
+}) {
+    const dialogRef = useModalDialog<HTMLElement>(open, onClose);
+    if (!open) return null;
+
+    const connected = status === "connected" && system !== null;
+
+    return (
+        <div
+            className="fixed inset-0 z-60 grid place-items-center p-4"
+            role="presentation"
+        >
+            <button
+                type="button"
+                className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+                onClick={onClose}
+                aria-label="Close controller menu"
+            />
+            <section
+                ref={dialogRef}
+                tabIndex={-1}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="controller-menu-title"
+                className="relative z-10 w-full max-w-xs rounded-2xl border border-(--border) bg-(--panel) p-4 shadow-(--shadow-2)"
+            >
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                            Phone Controller
+                        </div>
+                        <h2
+                            id="controller-menu-title"
+                            className="mt-1 text-lg font-black"
+                        >
+                            Controller menu
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="grid h-9 w-9 place-items-center rounded-lg border border-(--border) text-(--muted)"
+                        aria-label="Close controller menu"
+                    >
+                        <span aria-hidden="true">✕</span>
+                    </button>
+                </div>
+
+                <div className="mt-4 grid gap-2">
+                    <button
+                        type="button"
+                        onClick={onOpenConnection}
+                        data-autofocus
+                        className="flex items-center justify-between rounded-xl border border-(--border) bg-(--panel-2) px-4 py-3 text-left text-sm font-bold"
+                    >
+                        <span>Connection</span>
+                        <span
+                            className={[
+                                "flex items-center gap-2 text-xs",
+                                connected
+                                    ? "text-(--success)"
+                                    : status === "error"
+                                        ? "text-(--danger)"
+                                        : "text-(--muted)",
+                            ].join(" ")}
+                        >
+                            <span className="h-2 w-2 rounded-full bg-current" />
+                            {connected ? "Connected" : "Connect"}
+                        </span>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={onEditLayout}
+                        disabled={!system}
+                        className="rounded-xl border border-(--border) bg-(--panel-2) px-4 py-3 text-left text-sm font-bold disabled:opacity-40"
+                    >
+                        Customize layout
+                    </button>
+                    <Link
+                        href="/"
+                        className="rounded-xl border border-(--border) px-4 py-3 text-sm font-bold text-(--muted)"
+                    >
+                        Back to systems
+                    </Link>
+                </div>
+            </section>
+        </div>
+    );
+}
+
 function ConnectionDialog({
     open,
     code,
@@ -493,7 +596,7 @@ function ControllerSurface({
 
     return (
         <section
-            className="relative mt-2 min-h-0 flex-1 overflow-hidden rounded-2xl border border-(--border) bg-(--panel)"
+            className="relative min-h-0 flex-1 overflow-hidden rounded-2xl border border-(--border) bg-(--panel)"
             aria-label="Virtual controller"
         >
             {!editing && (
@@ -680,6 +783,7 @@ export default function PhoneControllerClient({
             : "Enter the six-digit code shown on the emulator.",
     );
     const [connectionOpen, setConnectionOpen] = useState(Boolean(initialCode));
+    const [controllerMenuOpen, setControllerMenuOpen] = useState(false);
     const [editingControls, setEditingControls] = useState(false);
     const orientation = useSyncExternalStore(
         subscribeToOrientation,
@@ -903,65 +1007,20 @@ export default function PhoneControllerClient({
     const connected = status === "connected" && system !== null;
 
     return (
-        <main className="h-dvh overflow-hidden bg-(--bg) p-2 text-(--text) sm:p-3">
-            <div className="mx-auto flex h-full w-full max-w-6xl flex-col">
-                <header className="flex shrink-0 items-center justify-between gap-4 px-1">
-                    <div>
-                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
-                            Web Emulator Lab
-                        </div>
-                        <h1 className="text-base font-black sm:text-lg">
-                            Phone Controller
-                        </h1>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setConnectionOpen(true)}
-                            className="flex items-center gap-2 rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted)"
-                        >
-                            <span
-                                className={[
-                                    "h-2 w-2 rounded-full",
-                                    connected
-                                        ? "bg-(--success)"
-                                        : status === "error"
-                                            ? "bg-(--danger)"
-                                            : "bg-(--muted)",
-                                ].join(" ")}
-                                aria-hidden="true"
-                            />
-                            {connected
-                                ? "Connected"
-                                : status === "connecting" || status === "waiting"
-                                    ? "Connecting"
-                                    : "Connect"}
-                        </button>
-                        <button
-                            type="button"
-                            disabled={!system}
-                            onClick={() => {
-                                if (!editingControls) releaseAll();
-                                setEditingControls((current) => !current);
-                            }}
-                            className="rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted) disabled:opacity-40"
-                            aria-label={
-                                editingControls
-                                    ? "Lock controller layout"
-                                    : "Customize controller layout"
-                            }
-                        >
-                            {editingControls ? "Done" : "Layout"}
-                        </button>
-                        <Link
-                            href="/"
-                            className="rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted)"
-                        >
-                            Systems
-                        </Link>
-                    </div>
-                </header>
+        <main className="relative h-dvh overflow-hidden bg-(--bg) p-2 text-(--text) sm:p-3">
+            <h1 className="sr-only">Phone Controller</h1>
+            {!editingControls && (
+                <button
+                    type="button"
+                    onClick={() => setControllerMenuOpen(true)}
+                    className="absolute left-1/2 top-3 z-50 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-(--border) bg-(--panel-translucent) text-sm font-black text-(--muted) shadow-(--shadow) backdrop-blur"
+                    aria-label="Open controller menu"
+                >
+                    <span aria-hidden="true">•••</span>
+                </button>
+            )}
 
+            <div className="mx-auto flex h-full w-full max-w-6xl flex-col">
                 <ControllerSurface
                     key={`${system ?? "disconnected"}:${orientation}`}
                     system={system}
@@ -973,6 +1032,21 @@ export default function PhoneControllerClient({
                     onRelease={release}
                 />
             </div>
+            <ControllerMenuDialog
+                open={controllerMenuOpen}
+                status={status}
+                system={system}
+                onClose={() => setControllerMenuOpen(false)}
+                onOpenConnection={() => {
+                    setControllerMenuOpen(false);
+                    setConnectionOpen(true);
+                }}
+                onEditLayout={() => {
+                    releaseAll();
+                    setControllerMenuOpen(false);
+                    setEditingControls(true);
+                }}
+            />
             <ConnectionDialog
                 open={connectionOpen}
                 code={code}

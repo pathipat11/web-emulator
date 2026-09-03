@@ -10,10 +10,7 @@ import Link from "next/link";
 import {
     getDsRomBytes,
     touchDsLastPlayed,
-    upsertDsRomEntry,
-    putDsRomBytes,
 } from "@/lib/storage/dsRomStore";
-import { hashRom } from "@/lib/hashRom";
 
 const DS_FRAME_READY = "web-emulator:ds-frame-ready";
 const DS_LOAD_ROM = "web-emulator:load-ds-rom";
@@ -251,7 +248,6 @@ type Tab = "emulator" | "library";
 type EmulatorState = "idle" | "loading" | "running" | "error";
 
 export default function DsPlayer() {
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
     const iframeRef = useRef<HTMLIFrameElement | null>(null);
     const htmlUrlRef = useRef<string | null>(null);
     const pendingRomRef = useRef<PendingRom | null>(null);
@@ -264,7 +260,9 @@ export default function DsPlayer() {
     const [romName, setRomName] = useState("-");
     const [romHashState, setRomHashState] = useState("");
     const [iframeSrc, setIframeSrc] = useState<string | null>(null);
-    const [message, setMessage] = useState("Upload a .nds ROM to begin. Emulation powered by EmulatorJS (DeSmuME).");
+    const [message, setMessage] = useState(
+        "Open Library to add or choose a .nds ROM. Emulation powered by EmulatorJS (DeSmuME).",
+    );
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
     const [showRestartConfirm, setShowRestartConfirm] = useState(false);
     const [menuHidden, setMenuHidden] = useState(false);
@@ -402,31 +400,6 @@ export default function DsPlayer() {
         }, 60_000);
     }, [revokeActiveUrls]);
 
-    async function onUpload(file: File | null) {
-        if (!file) return;
-        if (!file.name.toLowerCase().endsWith(".nds")) {
-            setMessage("Please upload a .nds file.");
-            return;
-        }
-
-        const buf = await file.arrayBuffer();
-        const romBytes = new Uint8Array(buf);
-        const romHash = await hashRom(romBytes);
-
-        await putDsRomBytes(romHash, romBytes);
-        upsertDsRomEntry({
-            romHash,
-            name: file.name,
-            size: romBytes.length,
-            addedAt: Date.now(),
-            lastPlayedAt: Date.now(),
-        });
-
-        setRomName(file.name);
-        setRomHashState(romHash);
-        launchRom(romBytes, file.name);
-    }
-
     const loadRomFromLibrary = useCallback(
         async (romHash: string, name: string) => {
             const bytes = await getDsRomBytes(romHash);
@@ -487,8 +460,7 @@ export default function DsPlayer() {
         activeFrameIdRef.current = "";
         gameStartedRef.current = false;
         setEmulatorState("idle");
-        setMessage("ROM ejected. Upload or pick a ROM to play.");
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        setMessage("ROM ejected. Open Library to choose another ROM.");
     }
 
     function onFullscreen() {
@@ -691,7 +663,7 @@ export default function DsPlayer() {
                                             No ROM loaded
                                         </div>
                                         <div className="mt-1 text-xs text-white/50">
-                                            Load a .nds file to start
+                                            Open Library to add or choose a game
                                         </div>
                                     </div>
                                 </div>
@@ -727,30 +699,11 @@ export default function DsPlayer() {
                     </div>
 
                     {!menuHidden && (
-                        <div className="mt-4 flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="text-xs leading-relaxed text-(--muted)" role="status">
-                                {message}
-                            </div>
-                            <div className="shrink-0">
-                                <input
-                                    ref={fileInputRef}
-                                    type="file"
-                                    accept=".nds"
-                                    className="hidden"
-                                    onChange={(event) => {
-                                        void onUpload(event.target.files?.[0] ?? null);
-                                        event.target.value = "";
-                                    }}
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => fileInputRef.current?.click()}
-                                    disabled={!isOnline || status === "loading"}
-                                    className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                    {status === "loading" ? "Loading core" : "Load ROM"}
-                                </button>
-                            </div>
+                        <div
+                            className="mt-4 text-xs leading-relaxed text-(--muted)"
+                            role="status"
+                        >
+                            {message}
                         </div>
                     )}
                 </div>

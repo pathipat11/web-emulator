@@ -4,16 +4,18 @@
 export function GbaConsole({
     canvasRef,
     status,
+    focusMode = false,
 }: {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
     status: "idle" | "running" | "paused";
+    focusMode?: boolean;
     onPress?: (btn: any) => void;
     onRelease?: (btn: any) => void;
 }) {
     return (
-        <div className="mt-4">
+        <div className={focusMode ? "" : "mt-2 lg:mt-4"}>
             <div
-                className="relative w-full overflow-hidden rounded-2xl bg-(--screen) scanlines"
+                className="relative w-full overflow-hidden rounded-xl bg-(--screen) scanlines lg:rounded-2xl"
                 style={{
                     boxShadow: `0 0 0 1px rgba(255,255,255,.06), 0 0 24px var(--screen-glow)`,
                 }}

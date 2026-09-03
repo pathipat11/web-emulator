@@ -26,15 +26,12 @@ import {
     getNesRomBytes,
     touchNesLastPlayed,
     setNesCoverArt,
-    upsertNesRomEntry,
-    putNesRomBytes,
 } from "@/lib/storage/nesRomStore";
 import {
     putNesSaveState,
     getNesSaveState,
     putNesMeta,
 } from "@/lib/storage/nesSaveStateStore";
-import { hashRom } from "@/lib/hashRom";
 import { usePhoneController } from "@/lib/hooks/usePhoneController";
 
 type Tab = "emulator" | "library";
@@ -53,14 +50,15 @@ const NES_PHONE_BUTTONS: readonly NesButton[] = [
 export default function NesPlayer() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
     const coreRef = useRef<NesCore | null>(null);
-    const fileInputRef = useRef<HTMLInputElement | null>(null);
 
     const [tab, setTab] = useState<Tab>("emulator");
     const [romName, setRomName] = useState("-");
     const [romHashState, setRomHashState] = useState("");
     const [status, setStatus] = useState<"idle" | "running" | "paused">("idle");
     const [coreState, setCoreState] = useState<"loading" | "ready" | "error">("loading");
-    const [message, setMessage] = useState("Upload a .nes ROM to begin.");
+    const [message, setMessage] = useState(
+        "Open Library to add or choose a .nes ROM.",
+    );
 
     const [gamepadInfo, setGamepadInfo] = useState("No controller");
     const [showSettings, setShowSettings] = useState(false);
@@ -122,7 +120,7 @@ export default function NesPlayer() {
             if (canvas) core.attachCanvas(canvas);
             core.setAudioEnabled?.(audioEnabledRef.current);
             setCoreState("ready");
-            setMessage("NES core ready. Upload a .nes ROM.");
+            setMessage("NES core ready. Open Library to choose a ROM.");
         } catch (error) {
             console.error(error);
             setCoreState("error");
@@ -138,48 +136,6 @@ export default function NesPlayer() {
     }, []);
 
     const canInteract = useMemo(() => status !== "idle", [status]);
-
-    async function onUpload(file: File | null) {
-        if (!file) return;
-        if (coreState !== "ready") {
-            setMessage(
-                coreState === "loading"
-                    ? "NES core is still loading."
-                    : "NES core is unavailable. Reload the page and try again.",
-            );
-            return;
-        }
-        if (!file.name.toLowerCase().endsWith(".nes")) {
-            setMessage("Please upload a .nes file.");
-            return;
-        }
-
-        const buf = await file.arrayBuffer();
-        const romBytes = new Uint8Array(buf);
-        const romHash = await hashRom(romBytes);
-
-        await putNesRomBytes(romHash, romBytes);
-        upsertNesRomEntry({
-            romHash,
-            name: file.name,
-            size: romBytes.length,
-            addedAt: Date.now(),
-            lastPlayedAt: Date.now(),
-        });
-
-        setRomName(file.name);
-        setRomHashState(romHash);
-        setMessage(`ROM loaded: ${file.name} (${romBytes.length.toLocaleString()} bytes)`);
-
-        try {
-            coreRef.current?.loadRom(romBytes, file.name);
-            setStatus(coreRef.current?.status ?? "running");
-            coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);
-        } catch (err: any) {
-            console.error(err);
-            setMessage(`Failed to start core: ${err?.message ?? String(err)}`);
-        }
-    }
 
     function saveCoverArt() {
         if (!romHashState || !canvasRef.current) return;
@@ -262,8 +218,7 @@ export default function NesPlayer() {
         setStatus("idle");
         setRomName("-");
         setRomHashState("");
-        setMessage("ROM ejected. Upload or pick a ROM to play.");
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        setMessage("ROM ejected. Open Library to choose another ROM.");
         const canvas = canvasRef.current;
         if (canvas) {
             const ctx = canvas.getContext("2d");
@@ -364,7 +319,7 @@ export default function NesPlayer() {
             {menuHidden ? (
                 <button
                     onClick={() => setMenuHidden(false)}
-                    className="fixed right-4 top-4 z-30 rounded-xl border border-(--border) bg-(--panel-translucent) px-3 py-2 text-xs font-bold shadow-(--shadow) backdrop-blur transition hover:border-(--accent-border)"
+                    className="fixed right-2 top-2 z-30 rounded-lg border border-(--border) bg-(--panel-translucent) px-2.5 py-1.5 text-[10px] font-bold shadow-(--shadow) backdrop-blur transition hover:border-(--accent-border) lg:right-4 lg:top-4 lg:rounded-xl lg:px-3 lg:py-2 lg:text-xs"
                     type="button"
                     title="Show interface (F2)"
                 >
@@ -372,21 +327,21 @@ export default function NesPlayer() {
                 </button>
             ) : (
                 <header className="sticky top-0 z-30 border-b border-(--border) bg-(--bg-translucent) backdrop-blur-xl">
-                    <div className="mx-auto flex min-h-18 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+                    <div className="mx-auto flex min-h-14 w-full max-w-7xl items-center justify-between gap-2 px-2 sm:px-4 lg:min-h-18 lg:gap-4 lg:px-8">
                         <div className="flex min-w-0 items-center gap-3">
                             <Link
                                 href="/"
-                                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-(--accent) text-xs font-black text-(--accent-text) shadow-(--accent-shadow)"
+                                className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-(--accent) text-[10px] font-black text-(--accent-text) shadow-(--accent-shadow) lg:h-10 lg:w-10 lg:rounded-xl lg:text-xs"
                                 aria-label="Back to systems"
                                 title="Back to systems"
                             >
                                 NES
                             </Link>
                             <div className="min-w-0">
-                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                                <div className="hidden text-[10px] font-black uppercase tracking-[0.18em] text-(--accent) lg:block">
                                     JSNES core
                                 </div>
-                                <h1 className="truncate text-lg font-black tracking-tight sm:text-xl">
+                                <h1 className="truncate text-sm font-black tracking-tight lg:text-xl">
                                     Nintendo NES
                                 </h1>
                             </div>
@@ -396,11 +351,13 @@ export default function NesPlayer() {
                             <span className="hidden max-w-52 truncate rounded-xl border border-(--border) bg-(--panel) px-3 py-2 text-xs text-(--muted) md:block">
                                 {gamepadInfo}
                             </span>
-                            <ThemeToggle />
+                            <div className="hidden lg:block">
+                                <ThemeToggle />
+                            </div>
                             <button
                                 type="button"
                                 onClick={() => setShowQuickMenu(true)}
-                                className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2.5 text-xs font-bold transition hover:border-(--accent-border) hover:bg-(--panel-2)"
+                                className="rounded-lg border border-(--border) bg-(--panel) px-2.5 py-2 text-[10px] font-bold transition hover:border-(--accent-border) hover:bg-(--panel-2) lg:rounded-xl lg:px-3 lg:py-2.5 lg:text-xs"
                             >
                                 Quick Menu
                             </button>
@@ -412,18 +369,18 @@ export default function NesPlayer() {
             <main className={[
                 "mx-auto w-full",
                 menuHidden
-                    ? "flex min-h-screen max-w-7xl items-center px-4 sm:px-6 lg:px-8"
-                    : "max-w-7xl px-4 pb-8 pt-5 sm:px-6 lg:px-8",
+                    ? "flex min-h-screen max-w-7xl items-center px-2 lg:px-8"
+                    : "max-w-7xl px-2 pb-3 pt-2 sm:px-4 lg:px-8 lg:pb-8 lg:pt-5",
             ].join(" ")}>
                 {!menuHidden && (
-                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="mb-2 flex items-center justify-between gap-2 lg:mb-5 lg:gap-3">
                         <div className="inline-flex rounded-xl border border-(--border) bg-(--panel) p-1">
                             {(["emulator", "library"] as const).map((nextTab) => (
                                 <button
                                     key={nextTab}
                                     onClick={() => setTab(nextTab)}
                                     className={[
-                                        "rounded-lg px-4 py-2 text-xs font-bold transition",
+                                        "rounded-lg px-3 py-1.5 text-[10px] font-bold transition lg:px-4 lg:py-2 lg:text-xs",
                                         tab === nextTab
                                             ? "bg-(--accent) text-(--accent-text)"
                                             : "text-(--muted) hover:bg-(--panel-2) hover:text-(--text)",
@@ -441,7 +398,7 @@ export default function NesPlayer() {
                                 setTab("emulator");
                                 setMenuHidden(true);
                             }}
-                            className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2 text-xs font-bold text-(--muted) transition hover:border-(--accent-border) hover:text-(--text)"
+                            className="rounded-lg border border-(--border) bg-(--panel) px-2.5 py-1.5 text-[10px] font-bold text-(--muted) transition hover:border-(--accent-border) hover:text-(--text) lg:rounded-xl lg:px-3 lg:py-2 lg:text-xs"
                             title="Hide interface (F2)"
                         >
                             Focus mode
@@ -451,7 +408,7 @@ export default function NesPlayer() {
 
                 <div className={tab !== "emulator" ? "hidden" : "w-full"}>
                     {!menuHidden && (
-                        <div className="flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="hidden flex-col gap-3 py-1 lg:flex lg:flex-row lg:items-center lg:justify-between">
                             <div className="flex min-w-0 items-center gap-3">
                                 <span className={[
                                     "h-2.5 w-2.5 shrink-0 rounded-full",
@@ -518,36 +475,17 @@ export default function NesPlayer() {
                         focusMode={menuHidden}
                     />
 
-                    {!menuHidden && (
-                        <>
-                            <NesMobileControls onPress={press} onRelease={release} />
+                    {phoneControllerState.status !== "connected" && (
+                        <NesMobileControls onPress={press} onRelease={release} />
+                    )}
 
-                            <div className="mt-4 flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
-                                <div className="text-xs leading-relaxed text-(--muted)" role="status">
-                                    {message}
-                                </div>
-                                <div className="shrink-0">
-                                    <input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept=".nes"
-                                        className="hidden"
-                                        onChange={(event) => {
-                                            onUpload(event.target.files?.[0] ?? null);
-                                            event.target.value = "";
-                                        }}
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={coreState !== "ready"}
-                                        className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        {coreState === "loading" ? "Loading core" : "Load ROM"}
-                                    </button>
-                                </div>
-                            </div>
-                        </>
+                    {!menuHidden && (
+                        <div
+                            className="mt-4 hidden text-xs leading-relaxed text-(--muted) lg:block"
+                            role="status"
+                        >
+                            {message}
+                        </div>
                     )}
                 </div>
 

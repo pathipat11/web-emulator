@@ -13,12 +13,12 @@ export function NesConsole({
         <div
             className={[
                 "mx-auto w-full",
-                focusMode ? "" : "mt-4 max-w-5xl",
+                focusMode ? "" : "mt-2 max-w-5xl lg:mt-4",
             ].join(" ")}
             style={focusMode ? { width: "min(100%, calc(133.333vh - 2.667rem))" } : undefined}
         >
             <div
-                className="relative w-full overflow-hidden rounded-2xl bg-(--screen) scanlines"
+                className="relative w-full overflow-hidden rounded-xl bg-(--screen) scanlines lg:rounded-2xl"
                 style={{
                     boxShadow: `0 0 0 1px rgba(255,255,255,.06), 0 0 24px var(--screen-glow)`,
                 }}

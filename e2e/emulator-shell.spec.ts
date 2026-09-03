@@ -69,27 +69,67 @@ test("home lists PlayStation Portable as a disabled future system", async ({
 });
 
 for (const system of systems) {
-    test(`${system.heading} shell supports its primary navigation`, async ({ page }) => {
+    test(`${system.heading} shell supports its primary navigation`, async (
+        { page },
+        testInfo,
+    ) => {
         const renderingErrors = collectRenderingErrors(page);
+        const isMobileProject = testInfo.project.name === "mobile-chromium";
 
         await page.goto(system.path);
         await expect(
             page.getByRole("heading", { name: system.heading }),
         ).toBeVisible();
-        await expect(page.getByRole("button", { name: "Load ROM" })).toBeVisible();
 
-        const romInput = page.locator(`input[type="file"][accept="${system.extension}"]`);
-        await expect(romInput).toHaveCount(1);
+        const romInput = page.locator(
+            `input[type="file"][accept="${system.extension}"]`,
+        );
+        await expect(
+            page.getByRole("button", { name: "Load ROM" }),
+        ).toHaveCount(0);
+        await expect(romInput).toHaveCount(0);
 
         await page.getByRole("button", { name: "Library" }).click();
         await expect(page.getByText("Library is empty")).toBeVisible();
         await expect(page.getByText(`${system.extension} files only`)).toBeVisible();
+        await expect(
+            page.getByRole("button", { name: /Add ROM/ }),
+        ).toBeVisible();
+        await expect(romInput).toHaveCount(1);
+        await romInput.setInputFiles({
+            name: `library-test${system.extension}`,
+            mimeType: "application/octet-stream",
+            buffer: Buffer.from([0x52, 0x4f, 0x4d]),
+        });
+        await expect(
+            page.getByText(`Added: library-test${system.extension}`),
+        ).toBeVisible();
+        await expect(
+            page.getByText(`library-test${system.extension}`, {
+                exact: true,
+            }),
+        ).toBeVisible();
 
         await page.getByRole("button", { name: "Player" }).click();
         await expect(page.getByRole("button", { name: "Focus mode" })).toBeVisible();
 
+        if (isMobileProject && system.hasQuickMenu) {
+            await expect(
+                page.getByRole("button", { name: "D-Pad Up" }),
+            ).toBeVisible();
+            await expect(page.getByRole("button", { name: /Audio/ })).toBeHidden();
+            await expect(
+                page.getByRole("button", { name: "Fullscreen" }),
+            ).toBeHidden();
+        }
+
         await page.getByRole("button", { name: "Focus mode" }).click();
         await expect(page.getByRole("button", { name: "Show interface" })).toBeVisible();
+        if (isMobileProject && system.hasQuickMenu) {
+            await expect(
+                page.getByRole("button", { name: "D-Pad Up" }),
+            ).toBeVisible();
+        }
         await page.getByRole("button", { name: "Show interface" }).click();
         await expect(
             page.getByRole("heading", { name: system.heading }),
@@ -106,6 +146,16 @@ for (const system of systems) {
             await expect(fullscreenButtons).toHaveCount(1);
             await expect(fullscreenButtons).toBeDisabled();
             await expect(page.getByRole("button", { name: "Restart" })).toBeDisabled();
+        }
+
+        if (isMobileProject && system.hasQuickMenu) {
+            const dimensions = await page.evaluate(() => ({
+                viewportHeight: window.innerHeight,
+                documentHeight: document.documentElement.scrollHeight,
+            }));
+            expect(dimensions.documentHeight).toBeLessThanOrEqual(
+                dimensions.viewportHeight + 2,
+            );
         }
 
         expect(renderingErrors).toEqual([]);
@@ -129,11 +179,16 @@ test("Nintendo DS can retry a failed CDN load without selecting the ROM again", 
     });
 
     await page.goto("/ds");
+    await page.getByRole("button", { name: "Library" }).click();
     await page.locator('input[type="file"][accept=".nds"]').setInputFiles({
         name: "retry-test.nds",
         mimeType: "application/octet-stream",
         buffer: Buffer.from([0x4e, 0x44, 0x53]),
     });
+    const retryCard = page
+        .getByRole("article")
+        .filter({ hasText: "retry-test.nds" });
+    await retryCard.getByRole("button", { name: "Play" }).click();
 
     await expect(page.getByText("Unable to start DS emulator")).toBeVisible();
     await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(2);
@@ -141,7 +196,7 @@ test("Nintendo DS can retry a failed CDN load without selecting the ROM again", 
     await expect(page.getByText("Unable to start DS emulator")).toBeVisible();
 
     expect(loaderRequests).toBeGreaterThanOrEqual(2);
-    await expect(page.locator('input[type="file"][accept=".nds"]')).toHaveCount(1);
+    await expect(page.locator('input[type="file"][accept=".nds"]')).toHaveCount(0);
 });
 
 test("a phone can pair with the GBA player through WebRTC", async ({

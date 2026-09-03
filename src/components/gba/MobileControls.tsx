@@ -18,8 +18,8 @@ function Btn({
     return (
         <button
             className={[
-                "touch-none select-none rounded-2xl border border-(--border) bg-(--panel)",
-                "text-center font-semibold shadow-sm active:scale-95 active:bg-(--panel-2) transition-transform",
+                "touch-none select-none rounded-xl border border-transparent bg-(--panel-2)",
+                "text-center font-semibold transition active:scale-95 active:border-(--accent-border) active:bg-(--accent) active:text-(--accent-text)",
                 className,
             ].join(" ")}
             aria-label={ariaLabel ?? label}
@@ -48,32 +48,29 @@ type Props = {
  */
 export function MobileControls({ onPress, onRelease }: Props) {
     return (
-        <div className="mt-4 lg:hidden">
-            {/* L / R shoulder buttons */}
-            <div className="mb-3 flex justify-between px-2">
+        <div className="mx-auto mt-2 w-full max-w-xl px-1 lg:hidden">
+            <div className="mb-1.5 grid grid-cols-2 gap-10 px-2">
                 <Btn
                     label="L"
-                    className="px-6 py-2 text-sm"
+                    className="h-9 w-full text-xs"
                     onPress={() => onPress("L")}
                     onRelease={() => onRelease("L")}
                 />
                 <Btn
                     label="R"
-                    className="px-6 py-2 text-sm"
+                    className="h-9 w-full text-xs"
                     onPress={() => onPress("R")}
                     onRelease={() => onRelease("R")}
                 />
             </div>
 
-            {/* Main row: D-Pad | Start/Select | A/B */}
-            <div className="flex items-center justify-between gap-3 px-2">
-                {/* D-Pad */}
-                <div className="grid grid-cols-3 gap-1.5">
+            <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-1">
+                <div className="mx-auto grid h-28 w-28 grid-cols-3 grid-rows-3 gap-0.5 rounded-full bg-(--panel-2) p-1">
                     <div />
                     <Btn
                         label="↑"
                         ariaLabel="D-Pad Up"
-                        className="h-11 w-11 text-base"
+                        className="rounded-t-xl rounded-b-md bg-(--panel-3) text-base"
                         onPress={() => onPress("UP")}
                         onRelease={() => onRelease("UP")}
                     />
@@ -81,58 +78,56 @@ export function MobileControls({ onPress, onRelease }: Props) {
                     <Btn
                         label="←"
                         ariaLabel="D-Pad Left"
-                        className="h-11 w-11 text-base"
+                        className="rounded-l-xl rounded-r-md bg-(--panel-3) text-base"
                         onPress={() => onPress("LEFT")}
                         onRelease={() => onRelease("LEFT")}
                     />
                     <Btn
                         label="↓"
                         ariaLabel="D-Pad Down"
-                        className="h-11 w-11 text-base"
+                        className="rounded-b-xl rounded-t-md bg-(--panel-3) text-base"
                         onPress={() => onPress("DOWN")}
                         onRelease={() => onRelease("DOWN")}
                     />
                     <Btn
                         label="→"
                         ariaLabel="D-Pad Right"
-                        className="h-11 w-11 text-base"
+                        className="rounded-r-xl rounded-l-md bg-(--panel-3) text-base"
                         onPress={() => onPress("RIGHT")}
                         onRelease={() => onRelease("RIGHT")}
                     />
                 </div>
 
-                {/* Start / Select */}
-                <div className="flex flex-col items-center gap-2">
+                <div className="flex flex-col items-center gap-1.5">
                     <Btn
-                        label="SELECT"
-                        className="px-4 py-1.5 text-[10px] tracking-wider"
+                        label="Select"
+                        className="h-8 min-w-14 px-2 text-[9px] uppercase tracking-wider"
                         onPress={() => onPress("SELECT")}
                         onRelease={() => onRelease("SELECT")}
                     />
                     <Btn
-                        label="START"
-                        className="px-4 py-1.5 text-[10px] tracking-wider"
+                        label="Start"
+                        className="h-8 min-w-14 px-2 text-[9px] uppercase tracking-wider"
                         onPress={() => onPress("START")}
                         onRelease={() => onRelease("START")}
                     />
                 </div>
 
-                {/* A / B — diamond layout like a real GBA */}
-                <div className="grid grid-cols-2 grid-rows-2 gap-1.5">
-                    <div />
-                    <Btn
-                        label="A"
-                        className="h-12 w-12 rounded-full text-sm bg-(--accent) border-transparent"
-                        onPress={() => onPress("A")}
-                        onRelease={() => onRelease("A")}
-                    />
+                <div className="mx-auto flex items-center gap-1.5">
                     <Btn
                         label="B"
-                        className="h-12 w-12 rounded-full text-sm bg-(--accent-2) border-transparent"
+                        className="h-13 w-13 rounded-full bg-(--accent-2) text-sm text-(--accent-text)"
                         onPress={() => onPress("B")}
                         onRelease={() => onRelease("B")}
                     />
-                    <div />
+                    <div className="-translate-y-4">
+                        <Btn
+                            label="A"
+                            className="h-13 w-13 rounded-full bg-(--accent) text-sm text-(--accent-text)"
+                            onPress={() => onPress("A")}
+                            onRelease={() => onRelease("A")}
+                        />
+                    </div>
                 </div>
             </div>
         </div>

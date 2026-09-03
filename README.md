@@ -25,11 +25,14 @@ browser and are never uploaded to an application server.
   defaults to dark
 - Player and Library tabs for every available system
 - Focus mode on every player; press `F2` to hide or restore the interface
+- Automatic compact play mode after launching a ROM on screens below `1024px`
 - Responsive ROM libraries with drag-and-drop import, play, and delete actions
 - Status indicators for the loaded ROM and emulator state
 - Shared Quick Menu for GBA and NES with keyboard and gamepad navigation
-- Phone Controller pairing for GBA and NES through WebRTC
+- Shared mobile virtual joystick with diagonal movement and stuck-input recovery
+- Phone Controller pairing for GBA and NES through WebRTC and a connection modal
 - Accessible modal focus handling and `Escape` dismissal
+- App-level and system-specific error recovery screens
 
 ## Emulator Features
 
@@ -48,7 +51,7 @@ The JavaScript glue and WASM binary are served from `public/mgba/`.
 - Remappable keyboard controls
 - Gamepad support through the browser Gamepad API
 - Phone Controller support with QR or six-digit pairing
-- Mobile D-Pad, A/B, L/R, Start, and Select controls
+- Mobile joystick, A/B, L/R, Start, and Select controls
 - Screenshot, cover-art capture, audio toggle, and fullscreen
 
 ### Nintendo NES
@@ -63,7 +66,7 @@ rendered to a 256×240 canvas and audio is sent through the Web Audio API.
 - Remappable keyboard controls
 - Gamepad support with NES-specific button mapping
 - Phone Controller support with QR or six-digit pairing
-- Mobile D-Pad, A/B, Start, and Select controls
+- Mobile joystick, A/B, Start, and Select controls
 - Screenshot, cover-art capture, audio toggle, and fullscreen
 
 ### Nintendo DS
@@ -110,6 +113,9 @@ The shared `EmulatorCore` interface contains the minimal `status`, `press`, and
   B to close menus.
 - `useModalDialog` manages initial focus, focus trapping, scroll locking, and
   focus restoration.
+- `VirtualJoystick` is shared by the GBA, NES, and Phone Controller interfaces.
+  It supports cardinal and diagonal input and releases active directions when
+  the pointer is cancelled, the page is hidden, or the window loses focus.
 
 Gameplay input is suspended while the Quick Menu, Settings, or a confirmation
 dialog is open.
@@ -120,8 +126,21 @@ GBA and NES can use another phone or browser tab as a controller:
 
 1. Open **Quick Menu → Phone Controller** on the emulator.
 2. Scan the QR code or open `/controller` and enter the six-digit code.
-3. After the WebRTC DataChannel connects, button events travel directly between
+3. Confirm the code in the Phone Controller connection modal.
+4. After the WebRTC DataChannel connects, button events travel directly between
    the phone and emulator.
+
+The controller is designed for landscape use and provides a virtual joystick,
+Start, Select, and system-specific action buttons. GBA and NES expose A/B only
+because those are the face buttons supported by their cores. The control layout
+is capability-based so X/Y can be added when a supported system such as SNES is
+implemented.
+
+The phone sends a heartbeat while connected. Both sides release held inputs when
+the page is hidden, loses focus, or the peer connection is interrupted. A
+temporary WebRTC interruption can recover without reloading the controller. If
+the connection reaches the failed state, create a new pairing code from the
+emulator.
 
 The Next.js API stores only the temporary WebRTC offer/answer used for pairing.
 Sessions expire after 10 minutes and are deleted when pairing completes or the
@@ -144,6 +163,23 @@ silently using unreliable instance memory.
 
 The first version targets devices on the same local network. DS is not supported
 because it runs inside a separate sandboxed iframe.
+
+### Error Recovery
+
+Next.js App Router error boundaries protect the application from an unexpected
+component or emulator failure:
+
+- `src/app/error.tsx` handles application route failures.
+- `src/app/global-error.tsx` provides a last-resort fallback if the root layout
+  fails.
+- GBA, NES, and DS each have a system-specific `error.tsx`.
+- The shared recovery screen offers **Try again**, **Reload page**, and
+  **Back to systems** actions.
+
+The recovery UI does not display internal error messages or stack traces. A
+full page reload is available for failures involving WASM, Web Workers, audio,
+or other browser runtime state. Error recovery does not delete IndexedDB ROMs or
+save states.
 
 ### Storage
 
@@ -198,7 +234,10 @@ The DS player additionally needs access to `cdn.emulatorjs.org`.
 
 The Playwright suite covers GBA, NES, and DS on desktop and mobile Chromium. It
 checks primary navigation, Focus mode, Quick Menu behavior, hydration/script
-warnings, and DS retry behavior after a simulated CDN failure.
+warnings, DS retry behavior after a simulated CDN failure, WebRTC Phone
+Controller pairing, connection modal behavior, and virtual joystick recovery.
+Vitest also covers the shared error recovery screen and joystick direction
+handling.
 
 GitHub Actions runs lint, unit tests, installs Chromium, builds the application,
 and runs the E2E suite on every push and pull request.
@@ -207,17 +246,19 @@ and runs the E2E suite on every push and pull request.
 
 ```text
 src/
-├── app/                    # App Router pages, root layout, and theme tokens
+├── app/                    # App Router pages, error boundaries, and theme tokens
 ├── components/
 │   ├── shell/              # Shared home-page shell
-│   ├── emulator/           # Shared Quick Menu
+│   ├── emulator/           # Quick Menu, joystick, error, and pairing UI
 │   ├── gba/                # GBA player, console, library, controls, settings
 │   ├── nes/                # NES player, console, library, controls, settings
-│   └── ds/                 # Sandboxed DS player and ROM library
+│   ├── ds/                 # Sandboxed DS player and ROM library
+│   └── phone-controller/   # Mobile WebRTC controller interface
 └── lib/
     ├── gba/                # mGBA adapter and loader
     ├── nes/                # JSNES adapter and input mapping
     ├── hooks/              # Shared input, modal, turbo, and auto-save hooks
+    ├── phone-controller/   # Signaling, WebRTC, validation, and shared types
     ├── storage/            # ROM and save-state IndexedDB stores
     ├── emulator-core.ts    # Shared emulator/input contracts
     └── hashRom.ts          # Shared SHA-256 ROM hashing

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
@@ -10,6 +9,7 @@ const AUTO_SAVE_INTERVAL = 30_000; // 30 seconds
 export function useAutoSaveOnClose({
     coreRef,
     romHash,
+    romName,
     enabled,
     slot = 1,
     setMessage,
@@ -17,6 +17,7 @@ export function useAutoSaveOnClose({
 }: {
     coreRef: React.RefObject<GbaCore | null>;
     romHash: string;
+    romName: string;
     enabled: boolean;
     slot?: Slot;
     setMessage?: (s: string) => void;
@@ -30,7 +31,7 @@ export function useAutoSaveOnClose({
         savingRef.current = true;
 
         try {
-            const c: any = coreRef.current;
+            const c = coreRef.current;
             if (!c) return;
 
             if (typeof c.saveStateBytes === "function") {
@@ -42,7 +43,7 @@ export function useAutoSaveOnClose({
                     await putSaveState(romHash, slot, bytes);
                     await putMeta({
                         romHash,
-                        romName: "",
+                        romName,
                         updatedAt: Date.now(),
                         lastSlot: slot,
                     });
@@ -50,25 +51,30 @@ export function useAutoSaveOnClose({
                     setMessage?.(`Auto-saved to slot ${slot}.`);
                     return;
                 }
+
+                // saveStateBytes already triggered an internal mGBA save.
+                setMessage?.(`Auto-saved internally to slot ${slot}; portable backup unavailable.`);
+                return;
             }
 
             // Fallback: internal save only (won't survive reload)
-            if (typeof c.saveState === "function") {
-                c.saveState(slot);
-            }
-        } catch {
-            // ignore
+            await c.saveState(slot);
+        } catch (error) {
+            console.error("[mGBA] Auto-save failed:", error);
+            setMessage?.(
+                `Auto-save failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
         } finally {
             savingRef.current = false;
         }
-    }, [coreRef, romHash, slot, setMessage, onSaveVersion]);
+    }, [coreRef, romHash, romName, slot, setMessage, onSaveVersion]);
 
     useEffect(() => {
         if (!enabled || !romHash) return;
 
         // Periodic auto-save every 30s while game is running
         const interval = setInterval(() => {
-            const c: any = coreRef.current;
+            const c = coreRef.current;
             if (c?.status === "running") {
                 doSave();
             }

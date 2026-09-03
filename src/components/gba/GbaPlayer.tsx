@@ -24,10 +24,24 @@ import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
 import { useKeymap } from "@/lib/hooks/useKeymap";
 import { defaultKeymap } from "@/lib/input";
 import { hashRom } from "@/lib/hashRom";
-import type { Slot } from "@/lib/storage/saveStateStore";
+import { getSaveState, type Slot } from "@/lib/storage/saveStateStore";
 import { getRomBytes, touchLastPlayed, setCoverArt, upsertRomEntry, putRomBytes } from "@/lib/storage/romStore";
 
 type Tab = "emulator" | "library";
+
+async function loadPortableState(
+    core: GbaCore,
+    romHash: string,
+    slot: Slot,
+): Promise<boolean> {
+    const bytes = await getSaveState(romHash, slot);
+    if (!bytes) return false;
+    if (!core.loadStateBytes) {
+        throw new Error("This mGBA build cannot load portable save states.");
+    }
+    await core.loadStateBytes(slot, bytes);
+    return true;
+}
 
 export default function GbaPlayer() {
     const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -118,6 +132,7 @@ export default function GbaPlayer() {
     useAutoSaveOnClose({
         coreRef,
         romHash: romHashState,
+        romName,
         enabled: autoSaveEnabled && status !== "idle",
         slot: autoSaveSlot,
         setMessage,
@@ -160,21 +175,30 @@ export default function GbaPlayer() {
         setMessage(`ROM loaded: ${file.name} (${romBytes.length.toLocaleString()} bytes)`);
 
         try {
-            await coreRef.current?.loadRom(romBytes, file.name);
+            const core = coreRef.current;
+            if (!core) throw new Error("mGBA core is not ready.");
+
+            await core.loadRom(romBytes, file.name);
+            let loadedMessage = `ROM loaded: ${file.name} (${romBytes.length.toLocaleString()} bytes)`;
             if (autoLoadOnRom) {
                 try {
-                    await coreRef.current?.loadState(autoSaveSlot);
-                    setMessage(`ROM loaded: ${file.name} (auto-loaded slot ${autoSaveSlot})`);
-                } catch {
-                    // no save data yet, skip
+                    if (await loadPortableState(core, romHash, autoSaveSlot)) {
+                        loadedMessage = `ROM loaded: ${file.name} (auto-loaded slot ${autoSaveSlot})`;
+                    }
+                } catch (error) {
+                    console.error(error);
+                    loadedMessage = `ROM loaded, but auto-load slot ${autoSaveSlot} failed: ${
+                        error instanceof Error ? error.message : String(error)
+                    }`;
                 }
             }
-            setStatus(coreRef.current?.status ?? "running");
+            setStatus(core.status);
+            setMessage(loadedMessage);
 
-            coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);
+            core.setAudioEnabled?.(audioEnabledRef.current);
 
             // re-apply turbo after load (core may reset speed)
-            const c: any = coreRef.current;
+            const c: any = core;
             if (typeof c?.setTurbo === "function") c.setTurbo(turbo);
             else if (typeof c?.setSpeedMultiplier === "function") c.setSpeedMultiplier(turbo);
         } catch (err: any) {
@@ -216,17 +240,28 @@ export default function GbaPlayer() {
             setMessage(`ROM loaded: ${name} (${bytes.length.toLocaleString()} bytes)`);
 
             try {
-                await coreRef.current?.loadRom(bytes, name);
+                const core = coreRef.current;
+                if (!core) throw new Error("mGBA core is not ready.");
+
+                await core.loadRom(bytes, name);
+                let loadedMessage = `ROM loaded: ${name} (${bytes.length.toLocaleString()} bytes)`;
                 if (autoLoadOnRom) {
                     try {
-                        await coreRef.current?.loadState(autoSaveSlot);
-                        setMessage(`ROM loaded: ${name} (auto-loaded slot ${autoSaveSlot})`);
-                    } catch { /* no save yet */ }
+                        if (await loadPortableState(core, romHash, autoSaveSlot)) {
+                            loadedMessage = `ROM loaded: ${name} (auto-loaded slot ${autoSaveSlot})`;
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        loadedMessage = `ROM loaded, but auto-load slot ${autoSaveSlot} failed: ${
+                            error instanceof Error ? error.message : String(error)
+                        }`;
+                    }
                 }
-                setStatus(coreRef.current?.status ?? "running");
-                coreRef.current?.setAudioEnabled?.(audioEnabledRef.current);
+                setStatus(core.status);
+                setMessage(loadedMessage);
+                core.setAudioEnabled?.(audioEnabledRef.current);
 
-                const c: any = coreRef.current;
+                const c: any = core;
                 if (typeof c?.setTurbo === "function") c.setTurbo(turbo);
                 else if (typeof c?.setSpeedMultiplier === "function") c.setSpeedMultiplier(turbo);
             } catch (err: any) {
@@ -294,7 +329,7 @@ export default function GbaPlayer() {
     }
 
     async function onSave(slot: Slot) {
-        const c: any = coreRef.current;
+        const c = coreRef.current;
         if (!c) return;
         if (!romHashState) {
             setMessage("Load a ROM first.");
@@ -311,9 +346,8 @@ export default function GbaPlayer() {
                     await putMeta({ romHash: romHashState, romName, updatedAt: Date.now(), lastSlot: slot });
                     setMessage(`Saved state to slot ${slot} (${bytes.length.toLocaleString()} bytes).`);
                 } else {
-                    // mGBA saved internally but we couldn't extract bytes from FS
-                    // Still call saveState so the emulator has it, just can't export
-                    await c.saveState(slot);
+                    // saveStateBytes already asked mGBA to save this slot, but the
+                    // portable file could not be identified safely.
                     setMessage(`Saved state to slot ${slot} (internal only — export unavailable).`);
                 }
             } else {
@@ -333,7 +367,6 @@ export default function GbaPlayer() {
             setMessage("Load a ROM first.");
             return;
         }
-        const { getSaveState } = await import("@/lib/storage/saveStateStore");
         const bytes = await getSaveState(romHashState, slot);
         if (!bytes) {
             setMessage(`No save data in slot ${slot}.`);
@@ -362,7 +395,7 @@ export default function GbaPlayer() {
         setSaveVersion((v) => v + 1);
 
         // Also load the imported state into the running emulator
-        const c: any = coreRef.current;
+        const c = coreRef.current;
         if (c && status !== "idle" && typeof c.loadStateBytes === "function") {
             try {
                 await c.loadStateBytes(slot, bytes);
@@ -377,7 +410,7 @@ export default function GbaPlayer() {
     }
 
     async function onLoad(slot: Slot) {
-        const c: any = coreRef.current;
+        const c = coreRef.current;
         if (!c) return;
         if (!romHashState) {
             setMessage("Load a ROM first.");
@@ -387,7 +420,6 @@ export default function GbaPlayer() {
         try {
             // Try loading from IndexedDB first (our portable save)
             if (typeof c.loadStateBytes === "function") {
-                const { getSaveState } = await import("@/lib/storage/saveStateStore");
                 const bytes = await getSaveState(romHashState, slot);
                 if (bytes) {
                     await c.loadStateBytes(slot, bytes);

@@ -16,20 +16,64 @@ export function useGamepadInput<B extends string>(
     const activeIndexRef = useRef<number | null>(null);
 
     useEffect(() => {
-        const onConnected = (e: GamepadEvent) => {
-            activeIndexRef.current = e.gamepad.index;
-            setGamepadInfo(`${e.gamepad.id} (index ${e.gamepad.index})`);
+        const activeInputs = new Map<string, B>();
+        let raf = 0;
+        let lastInfo = "";
+
+        const updateInfo = (info: string) => {
+            if (lastInfo === info) return;
+            lastInfo = info;
+            setGamepadInfo(info);
         };
-        const onDisconnected = () => {
+
+        const hasActiveButton = (button: B) =>
+            Array.from(activeInputs.values()).some((activeButton) => activeButton === button);
+
+        const setInput = (key: string, button: B, isDown: boolean) => {
+            if (isDown) {
+                if (activeInputs.has(key)) return;
+                const buttonAlreadyActive = hasActiveButton(button);
+                activeInputs.set(key, button);
+                if (!buttonAlreadyActive) coreRef.current?.press(button);
+                return;
+            }
+
+            const activeButton = activeInputs.get(key);
+            if (!activeButton) return;
+            activeInputs.delete(key);
+            if (!hasActiveButton(activeButton)) coreRef.current?.release(activeButton);
+        };
+
+        const releaseAll = () => {
+            const buttons = new Set(activeInputs.values());
+            activeInputs.clear();
+            const core = coreRef.current;
+            if (!core) return;
+            for (const button of buttons) core.release(button);
+        };
+
+        const onConnected = (e: GamepadEvent) => {
+            if (activeIndexRef.current !== e.gamepad.index) releaseAll();
+            activeIndexRef.current = e.gamepad.index;
+            updateInfo(`${e.gamepad.id} (index ${e.gamepad.index})`);
+        };
+        const onDisconnected = (e: GamepadEvent) => {
+            if (
+                activeIndexRef.current !== null &&
+                activeIndexRef.current !== e.gamepad.index
+            ) return;
+            releaseAll();
             activeIndexRef.current = null;
-            setGamepadInfo("No controller");
+            updateInfo("No controller");
+        };
+        const onVisibilityChange = () => {
+            if (document.visibilityState === "hidden") releaseAll();
         };
 
         window.addEventListener("gamepadconnected", onConnected);
         window.addEventListener("gamepaddisconnected", onDisconnected);
-
-        let raf = 0;
-        const pressed = new Set<string>();
+        window.addEventListener("blur", releaseAll);
+        document.addEventListener("visibilitychange", onVisibilityChange);
 
         const tick = () => {
             const pads = navigator.getGamepads?.() ?? [];
@@ -39,21 +83,18 @@ export function useGamepadInput<B extends string>(
                 null;
 
             if (gp) {
-                setGamepadInfo(`${gp.id} (index ${gp.index})`);
+                if (activeIndexRef.current !== gp.index) {
+                    releaseAll();
+                    activeIndexRef.current = gp.index;
+                }
+                updateInfo(`${gp.id} (index ${gp.index})`);
 
                 // buttons
                 for (const [btnIndexStr, btn] of Object.entries(mapping.buttons)) {
+                    if (!btn) continue;
                     const idx = Number(btnIndexStr);
                     const isDown = !!gp.buttons?.[idx]?.pressed;
-                    const key = `b:${idx}`;
-
-                    if (isDown && !pressed.has(key)) {
-                        pressed.add(key);
-                        coreRef.current?.press(btn!);
-                    } else if (!isDown && pressed.has(key)) {
-                        pressed.delete(key);
-                        coreRef.current?.release(btn!);
-                    }
+                    setInput(`b:${idx}`, btn, isDown);
                 }
 
                 // axes
@@ -69,21 +110,16 @@ export function useGamepadInput<B extends string>(
                         const negKey = `a:${name}:neg`;
                         const posKey = `a:${name}:pos`;
 
-                        if (v < -dz) {
-                            if (!pressed.has(negKey)) { pressed.add(negKey); coreRef.current?.press(cfg.negative); }
-                        } else if (pressed.has(negKey)) { pressed.delete(negKey); coreRef.current?.release(cfg.negative); }
-
-                        if (v > dz) {
-                            if (!pressed.has(posKey)) { pressed.add(posKey); coreRef.current?.press(cfg.positive); }
-                        } else if (pressed.has(posKey)) { pressed.delete(posKey); coreRef.current?.release(cfg.positive); }
+                        setInput(negKey, cfg.negative, v < -dz);
+                        setInput(posKey, cfg.positive, v > dz);
                     };
 
                     handleAxis("x");
                     handleAxis("y");
                 }
             } else {
-                setGamepadInfo("No controller");
-                pressed.clear();
+                releaseAll();
+                updateInfo("No controller");
             }
 
             raf = requestAnimationFrame(tick);
@@ -95,6 +131,9 @@ export function useGamepadInput<B extends string>(
             cancelAnimationFrame(raf);
             window.removeEventListener("gamepadconnected", onConnected);
             window.removeEventListener("gamepaddisconnected", onDisconnected);
+            window.removeEventListener("blur", releaseAll);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
+            releaseAll();
         };
     }, [coreRef, mapping, setGamepadInfo]);
 }

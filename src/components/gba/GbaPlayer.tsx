@@ -614,7 +614,7 @@ export default function GbaPlayer() {
 
                 <div className={tab !== "emulator" ? "hidden" : "w-full"}>
                     {!menuHidden && (
-                        <div className="flex flex-col gap-3 rounded-2xl border border-(--border) bg-(--panel) p-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex min-w-0 items-center gap-3">
                                 <span className={[
                                     "h-2.5 w-2.5 shrink-0 rounded-full",
@@ -681,7 +681,7 @@ export default function GbaPlayer() {
                         <>
                             <MobileControls onPress={press} onRelease={release} />
 
-                            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-(--border) bg-(--panel) p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="mt-4 flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
                                 <div className="text-xs leading-relaxed text-(--muted)" role="status">
                                     {message}
                                 </div>

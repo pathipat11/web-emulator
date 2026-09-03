@@ -3,12 +3,20 @@
 export function NesConsole({
     canvasRef,
     status,
+    focusMode = false,
 }: {
     canvasRef: React.RefObject<HTMLCanvasElement | null>;
     status: "idle" | "running" | "paused";
+    focusMode?: boolean;
 }) {
     return (
-        <div className="mt-4 mx-auto max-w-3xl">
+        <div
+            className={[
+                "mx-auto w-full",
+                focusMode ? "" : "mt-4 max-w-5xl",
+            ].join(" ")}
+            style={focusMode ? { width: "min(100%, calc(133.333vh - 2.667rem))" } : undefined}
+        >
             <div
                 className="relative w-full overflow-hidden rounded-2xl bg-(--screen) scanlines"
                 style={{

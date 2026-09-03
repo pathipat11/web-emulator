@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import ThemeToggle from "@/components/ThemeToggle";
 import { ConfirmDialog } from "@/components/ds/ConfirmDialog";
@@ -27,6 +27,24 @@ type PendingRom = {
     bytes: ArrayBuffer;
     gameName: string;
 };
+
+function subscribeToOnlineStatus(onStoreChange: () => void) {
+    window.addEventListener("online", onStoreChange);
+    window.addEventListener("offline", onStoreChange);
+
+    return () => {
+        window.removeEventListener("online", onStoreChange);
+        window.removeEventListener("offline", onStoreChange);
+    };
+}
+
+function getOnlineStatus() {
+    return navigator.onLine;
+}
+
+function getServerOnlineStatus() {
+    return true;
+}
 
 function createCspNonce(): string {
     const bytes = new Uint8Array(16);
@@ -250,8 +268,10 @@ export default function DsPlayer() {
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
     const [menuHidden, setMenuHidden] = useState(false);
     const [emulatorState, setEmulatorState] = useState<EmulatorState>("idle");
-    const [isOnline, setIsOnline] = useState(
-        () => typeof navigator === "undefined" || navigator.onLine,
+    const isOnline = useSyncExternalStore(
+        subscribeToOnlineStatus,
+        getOnlineStatus,
+        getServerOnlineStatus,
     );
 
     const status = emulatorState;
@@ -267,7 +287,10 @@ export default function DsPlayer() {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === "F2") {
                 e.preventDefault();
-                setMenuHidden((h) => !h);
+                setMenuHidden((hidden) => {
+                    if (!hidden) setTab("emulator");
+                    return !hidden;
+                });
             }
         };
         window.addEventListener("keydown", onKeyDown);
@@ -275,8 +298,6 @@ export default function DsPlayer() {
     }, []);
 
     useEffect(() => {
-        const handleOnline = () => setIsOnline(true);
-        const handleOffline = () => setIsOnline(false);
         const handleFrameMessage = (event: MessageEvent) => {
             if (event.source !== iframeRef.current?.contentWindow) return;
 
@@ -339,13 +360,9 @@ export default function DsPlayer() {
             }
         };
 
-        window.addEventListener("online", handleOnline);
-        window.addEventListener("offline", handleOffline);
         window.addEventListener("message", handleFrameMessage);
 
         return () => {
-            window.removeEventListener("online", handleOnline);
-            window.removeEventListener("offline", handleOffline);
             window.removeEventListener("message", handleFrameMessage);
             if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
             revokeActiveUrls();
@@ -441,162 +458,272 @@ export default function DsPlayer() {
     }
 
     return (
-        <div className={[
-            "mx-auto w-full max-w-5xl",
-            menuHidden ? "flex min-h-screen flex-col items-center justify-center" : "p-4 lg:p-6",
-        ].join(" ")}>
-            {/* Floating toggle button — always visible */}
-            <button
-                onClick={() => setMenuHidden((h) => !h)}
-                className="fixed right-4 top-4 z-30 rounded-full border bg-(--panel) border-(--border) px-3 py-1.5 text-xs shadow-md hover:-translate-y-px transition"
-                type="button"
-                aria-label={menuHidden ? "Show menu" : "Hide menu"}
-                title={`${menuHidden ? "Show" : "Hide"} menu (F2)`}
-            >
-                {menuHidden ? "☰ Show" : "✕ Hide"}
-            </button>
+        <div className="min-h-screen bg-(--bg)">
+            {menuHidden ? (
+                <button
+                    onClick={() => setMenuHidden(false)}
+                    className="fixed right-4 top-4 z-30 rounded-xl border border-(--border) bg-(--panel-translucent) px-3 py-2 text-xs font-bold shadow-(--shadow) backdrop-blur transition hover:border-(--accent-border)"
+                    type="button"
+                    title="Show interface (F2)"
+                >
+                    Show interface
+                </button>
+            ) : (
+                <header className="sticky top-0 z-30 border-b border-(--border) bg-(--bg-translucent) backdrop-blur-xl">
+                    <div className="mx-auto flex min-h-18 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <Link
+                                href="/"
+                                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-(--accent) text-xs font-black text-(--accent-text) shadow-(--accent-shadow)"
+                                aria-label="Back to systems"
+                                title="Back to systems"
+                            >
+                                DS
+                            </Link>
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                                    EmulatorJS core
+                                </div>
+                                <h1 className="truncate text-lg font-black tracking-tight sm:text-xl">
+                                    Nintendo DS
+                                </h1>
+                            </div>
+                        </div>
 
-            {/* Header */}
-            <div className={[
-                "mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between",
-                menuHidden ? "hidden" : "",
-            ].join(" ")}>
-                <div>
-                    <div className="text-2xl font-bold tracking-tight">DS Emulator</div>
-                    <div className="text-sm text-(--muted)">Upload .nds → Play in browser (EmulatorJS + DeSmuME)</div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <Link href="/" className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text) hover:-translate-y-px transition">← Home</Link>
-                    <ThemeToggle />
-                </div>
-            </div>
-
-            {/* Tab bar */}
-            <div className={[
-                "mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1",
-                menuHidden ? "hidden" : "",
-            ].join(" ")}>
-                {(["emulator", "library"] as const).map((t) => (
-                    <button key={t} onClick={() => setTab(t)} className={[
-                        "flex-1 rounded-(--radius) px-4 py-2 text-sm font-medium transition",
-                        tab === t ? "bg-(--accent) text-white shadow-sm" : "text-(--muted) hover:text-(--text)",
-                    ].join(" ")} type="button">
-                        {t === "emulator" ? "🎮 Emulator" : "📚 Library"}
-                    </button>
-                ))}
-            </div>
-
-            {/* Emulator */}
-            <div className={tab !== "emulator" ? "hidden" : "w-full"}>
-                {/* Controls bar */}
-                <div className={[
-                    "flex flex-wrap items-center justify-between gap-3",
-                    menuHidden ? "hidden" : "",
-                ].join(" ")}>
-                    <div className="flex items-center gap-3">
-                        <div className="text-sm font-medium text-(--text) truncate max-w-48">{romName !== "-" ? romName : "No ROM"}</div>
-                        <div className={[
-                            "h-2 w-2 rounded-full",
-                            status === "running" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]" : "",
-                            status === "loading" ? "bg-amber-300 shadow-[0_0_6px_rgba(252,211,77,0.5)]" : "",
-                            status === "error" ? "bg-red-400 shadow-[0_0_6px_rgba(248,113,113,0.5)]" : "",
-                            status === "idle" ? "bg-(--muted)/40" : "",
-                        ].join(" ")} />
-                        {romHashState && <div className="text-xs text-(--muted)">#{romHashState.slice(0, 8)}</div>}
+                        <div className="flex shrink-0 items-center gap-2">
+                            <span className={[
+                                "hidden rounded-xl border bg-(--panel) px-3 py-2 text-xs font-bold md:block",
+                                isOnline
+                                    ? "border-(--border) text-(--muted)"
+                                    : "border-(--warning) text-(--warning)",
+                            ].join(" ")}>
+                                {isOnline ? "Online" : "Offline"}
+                            </span>
+                            <ThemeToggle />
+                            <button
+                                type="button"
+                                onClick={onFullscreen}
+                                disabled={!iframeSrc || status === "error"}
+                                className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2.5 text-xs font-bold transition hover:border-(--accent-border) hover:bg-(--panel-2) disabled:cursor-not-allowed disabled:opacity-40"
+                            >
+                                Fullscreen
+                            </button>
+                        </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <button onClick={() => setShowEjectConfirm(true)} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition" disabled={!iframeSrc} type="button">Eject</button>
-                        <button onClick={onFullscreen} className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50" disabled={!iframeSrc || status === "error"} type="button">Fullscreen</button>
-                    </div>
-                </div>
+                </header>
+            )}
 
-                {!isOnline && (
-                    <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-700 dark:text-amber-200">
-                        DS emulation needs internet access to load EmulatorJS. Reconnect before launching a ROM.
+            <main className={[
+                "mx-auto w-full",
+                menuHidden
+                    ? "flex min-h-screen max-w-7xl items-center justify-center px-4 py-4 sm:px-6 lg:px-8"
+                    : "max-w-7xl px-4 pb-8 pt-5 sm:px-6 lg:px-8",
+            ].join(" ")}>
+                {!menuHidden && (
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                        <div className="inline-flex rounded-xl border border-(--border) bg-(--panel) p-1">
+                            {(["emulator", "library"] as const).map((nextTab) => (
+                                <button
+                                    key={nextTab}
+                                    onClick={() => setTab(nextTab)}
+                                    className={[
+                                        "rounded-lg px-4 py-2 text-xs font-bold transition",
+                                        tab === nextTab
+                                            ? "bg-(--accent) text-(--accent-text)"
+                                            : "text-(--muted) hover:bg-(--panel-2) hover:text-(--text)",
+                                    ].join(" ")}
+                                    type="button"
+                                >
+                                    {nextTab === "emulator" ? "Player" : "Library"}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setTab("emulator");
+                                setMenuHidden(true);
+                            }}
+                            className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2 text-xs font-bold text-(--muted) transition hover:border-(--accent-border) hover:text-(--text)"
+                            title="Hide interface (F2)"
+                        >
+                            Focus mode
+                        </button>
                     </div>
                 )}
 
-                {/* Emulator display */}
-                <div className="mt-4 mx-auto max-w-2xl">
+                <div className={tab !== "emulator" ? "hidden" : "w-full"}>
+                    {!menuHidden && (
+                        <>
+                            <div className="flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="flex min-w-0 items-center gap-3">
+                                    <span className={[
+                                        "h-2.5 w-2.5 shrink-0 rounded-full",
+                                        status === "error"
+                                            ? "bg-(--danger)"
+                                            : status === "loading"
+                                                ? "bg-(--warning)"
+                                                : status === "running"
+                                                    ? "bg-(--success)"
+                                                    : "bg-(--muted)",
+                                    ].join(" ")} />
+                                    <div className="min-w-0">
+                                        <div className="truncate text-sm font-bold">
+                                            {romName !== "-" ? romName : "No ROM loaded"}
+                                        </div>
+                                        <div className="text-[11px] text-(--muted)">
+                                            {status === "loading"
+                                                ? "Core loading"
+                                                : status === "error"
+                                                    ? "Core unavailable"
+                                                    : status === "running"
+                                                        ? "Running"
+                                                        : "Ready"}
+                                            {romHashState ? ` · #${romHashState.slice(0, 8)}` : ""}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEjectConfirm(true)}
+                                        disabled={!iframeSrc}
+                                        className="rounded-xl border border-(--border) px-3 py-2 text-xs font-bold text-(--muted) transition hover:border-(--danger) hover:text-(--danger) disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Eject
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={onFullscreen}
+                                        disabled={!iframeSrc || status === "error"}
+                                        className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        Fullscreen
+                                    </button>
+                                </div>
+                            </div>
+
+                            {!isOnline && (
+                                <div className="mt-3 rounded-xl border border-(--warning) bg-(--panel) px-4 py-3 text-xs text-(--warning)">
+                                    DS requires internet access to load EmulatorJS.
+                                </div>
+                            )}
+                        </>
+                    )}
+
                     <div
-                        className="relative w-full overflow-hidden rounded-2xl bg-black"
-                        style={{
-                            aspectRatio: "3 / 4",
-                            boxShadow: `0 0 0 1px rgba(255,255,255,.06), 0 0 24px var(--screen-glow)`,
-                        }}
+                        className={[
+                            "mx-auto w-full",
+                            menuHidden ? "" : "mt-4 max-w-2xl",
+                        ].join(" ")}
+                        style={menuHidden ? { width: "min(100%, calc((100vh - 2rem) * 0.75))" } : undefined}
                     >
-                        {iframeSrc ? (
-                            <iframe
-                                ref={iframeRef}
-                                src={iframeSrc}
-                                title={`DS Emulator - ${romName}`}
-                                sandbox="allow-scripts allow-pointer-lock allow-downloads"
-                                allow="autoplay; gamepad; fullscreen; screen-wake-lock *"
-                                allowFullScreen
-                                referrerPolicy="no-referrer"
-                                className="h-full w-full border-none"
-                                style={{ display: "block", background: "#000", borderRadius: "16px" }}
-                                onError={() => {
-                                    if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
-                                    setEmulatorState("error");
-                                    setMessage("Failed to load the DS emulator frame. Check your internet connection and try again.");
-                                }}
-                            />
-                        ) : (
-                            <div className="absolute inset-0 grid place-items-center text-center">
-                                <div>
-                                    <div className="text-4xl mb-3">🎮</div>
-                                    <div className="text-sm text-white/50">Upload a .nds ROM to start playing</div>
-                                    <div className="mt-1 text-xs text-white/30">EmulatorJS handles controls and audio</div>
+                        <div
+                            className="relative w-full overflow-hidden rounded-2xl border border-(--border) bg-(--screen)"
+                            style={{
+                                aspectRatio: "3 / 4",
+                                boxShadow: "0 0 24px var(--screen-glow)",
+                            }}
+                        >
+                            {iframeSrc ? (
+                                <iframe
+                                    ref={iframeRef}
+                                    src={iframeSrc}
+                                    title={`DS Emulator - ${romName}`}
+                                    sandbox="allow-scripts allow-pointer-lock allow-downloads"
+                                    allow="autoplay; gamepad; fullscreen; screen-wake-lock *"
+                                    allowFullScreen
+                                    referrerPolicy="no-referrer"
+                                    className="h-full w-full border-none bg-(--screen)"
+                                    onError={() => {
+                                        if (loadTimeoutRef.current) window.clearTimeout(loadTimeoutRef.current);
+                                        setEmulatorState("error");
+                                        setMessage("Failed to load the DS emulator frame. Check your internet connection and try again.");
+                                    }}
+                                />
+                            ) : (
+                                <div className="absolute inset-0 grid place-items-center px-6 text-center">
+                                    <div>
+                                        <div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl border border-(--border) font-mono text-sm font-black text-(--muted)">
+                                            DS
+                                        </div>
+                                        <div className="mt-4 text-sm font-bold text-white">
+                                            No ROM loaded
+                                        </div>
+                                        <div className="mt-1 text-xs text-white/50">
+                                            Load a .nds file to start
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        {status === "loading" && (
-                            <div className="absolute inset-0 grid place-items-center bg-black/75 text-center text-white">
-                                <div>
-                                    <div className="text-sm font-medium">Loading DS emulator...</div>
-                                    <div className="mt-1 max-w-md px-4 text-xs text-white/50">{message}</div>
+                            )}
+
+                            {status === "loading" && (
+                                <div className="absolute inset-0 grid place-items-center bg-black/80 px-6 text-center text-white">
+                                    <div>
+                                        <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+                                        <div className="mt-4 text-sm font-bold">Loading DS emulator...</div>
+                                        <div className="mt-1 max-w-md text-xs text-white/50">{message}</div>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        {status === "error" && (
-                            <div className="absolute inset-0 grid place-items-center bg-black/80 text-center text-white">
-                                <div>
-                                    <div className="text-sm font-medium text-red-200">Unable to start DS emulator</div>
-                                    <div className="mt-1 max-w-md px-4 text-xs text-white/50">{message}</div>
+                            )}
+
+                            {status === "error" && (
+                                <div className="absolute inset-0 grid place-items-center bg-black/85 px-6 text-center text-white">
+                                    <div>
+                                        <div className="text-sm font-bold text-(--danger)">Unable to start DS emulator</div>
+                                        <div className="mt-2 max-w-md text-xs text-white/55">{message}</div>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
+
+                    {!menuHidden && (
+                        <div className="mt-4 flex flex-col gap-3 py-1 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="text-xs leading-relaxed text-(--muted)" role="status">
+                                {message}
+                            </div>
+                            <div className="shrink-0">
+                                <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept=".nds"
+                                    className="hidden"
+                                    onChange={(event) => {
+                                        void onUpload(event.target.files?.[0] ?? null);
+                                        event.target.value = "";
+                                    }}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={!isOnline || status === "loading"}
+                                    className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                    {status === "loading" ? "Loading core" : "Load ROM"}
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
 
-                {/* Bottom row */}
-                <div className={[
-                    "mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
-                    menuHidden ? "hidden" : "",
-                ].join(" ")}>
-                    <div className="text-sm text-(--muted)">{message}</div>
-                    <label className="inline-flex items-center gap-2">
-                        <input ref={fileInputRef} type="file" accept=".nds" className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)" onChange={(e) => { onUpload(e.target.files?.[0] ?? null); e.target.value = ""; }} />
-                    </label>
-                </div>
+                {!menuHidden && tab === "library" && <DsRomLibrary onPlay={loadRomFromLibrary} />}
+            </main>
 
-                {/* Info box */}
-                <div className={[
-                    "mt-4 rounded-2xl bg-(--panel) border border-(--border) p-4 text-sm text-(--muted)",
-                    menuHidden ? "hidden" : "",
-                ].join(" ")}>
-                    <div className="font-medium text-(--text) mb-1">Controls</div>
-                    EmulatorJS provides built-in controls: keyboard, gamepad, and on-screen touch buttons.
-                    Use the emulator&apos;s own toolbar (inside the player) for settings and fullscreen.
-                    Persistent DS save states are currently disabled inside the restricted player frame.
-                    DS emulation requires internet access because EmulatorJS is loaded from its CDN.
-                </div>
-            </div>
-
-            {tab === "library" && <DsRomLibrary onPlay={loadRomFromLibrary} />}
-
-            <ConfirmDialog open={showEjectConfirm} title="Eject ROM" message={`Remove "${romName}" from the emulator? The ROM remains in your library, but the current DS session state may be lost.`} confirmLabel="Eject" danger onConfirm={() => { setShowEjectConfirm(false); onEject(); }} onCancel={() => setShowEjectConfirm(false)} />
+            <ConfirmDialog
+                open={showEjectConfirm}
+                title="Eject ROM"
+                message={`Remove "${romName}" from the emulator? The ROM remains in your library, but the current DS session state may be lost.`}
+                confirmLabel="Eject"
+                danger
+                onConfirm={() => {
+                    setShowEjectConfirm(false);
+                    onEject();
+                }}
+                onCancel={() => setShowEjectConfirm(false)}
+            />
         </div>
     );
 }

@@ -50,22 +50,40 @@ function collectRenderingErrors(page: Page) {
     return errors;
 }
 
-test("home lists PlayStation Portable as a disabled future system", async ({
-    page,
-}) => {
+test("home lists future systems as disabled cards", async ({ page }) => {
     await page.goto("/");
 
-    const pspCard = page
-        .getByRole("article")
-        .filter({ hasText: "PlayStation Portable" });
-    await expect(pspCard).toBeVisible();
-    await expect(pspCard.getByText("PPSSPP", { exact: true })).toBeVisible();
-    await expect(pspCard.getByText("Coming soon")).toBeVisible();
-    await expect(pspCard.getByText("Unavailable")).toBeVisible();
-    await expect(pspCard.getByRole("link")).toHaveCount(0);
-    const pspImage = pspCard.locator("img");
-    await expect(pspImage).toHaveCount(1);
-    await expect(pspImage).toHaveAttribute("src", /\/images\/psp\.jpg$/);
+    const futureSystems = [
+        {
+            title: "PlayStation Portable",
+            core: "PPSSPP",
+            image: /\/images\/psp\.jpg$/,
+        },
+        {
+            title: "Nintendo 3DS",
+            core: "Planned",
+            image: /\/images\/3DS\.jpeg$/,
+        },
+        {
+            title: "Nintendo Wii",
+            core: "Planned",
+            image: /\/images\/Nintendo-Wii\.png$/,
+        },
+    ];
+
+    for (const system of futureSystems) {
+        const card = page
+            .getByRole("article")
+            .filter({ hasText: system.title });
+        await expect(card).toBeVisible();
+        await expect(card.getByText(system.core, { exact: true })).toBeVisible();
+        await expect(card.getByText("Coming soon")).toBeVisible();
+        await expect(card.getByText("Unavailable")).toBeVisible();
+        await expect(card.getByRole("link")).toHaveCount(0);
+        await expect(card.locator("img")).toHaveAttribute("src", system.image);
+    }
+
+    await expect(page.getByText("3 of 9 available")).toBeVisible();
 });
 
 for (const system of systems) {
@@ -110,12 +128,39 @@ for (const system of systems) {
             }),
         ).toBeVisible();
 
-        await page.getByRole("button", { name: "Player" }).click();
+        if (system.hasQuickMenu) {
+            await expect(
+                page.getByText("Ready", { exact: true }),
+            ).toHaveCount(1);
+            const libraryCard = page
+                .getByRole("article")
+                .filter({ hasText: `library-test${system.extension}` });
+            await libraryCard.getByRole("button", { name: "Play" }).click();
+
+            if (isMobileProject) {
+                await expect(
+                    page.getByRole("button", { name: "Show interface" }),
+                ).toBeVisible();
+                await expect(
+                    page.getByRole("application", { name: "Virtual joystick" }),
+                ).toBeVisible();
+                await page
+                    .getByRole("button", { name: "Show interface" })
+                    .click();
+            } else {
+                await expect(
+                    page.getByRole("button", { name: "Show interface" }),
+                ).toHaveCount(0);
+            }
+        } else {
+            await page.getByRole("button", { name: "Player" }).click();
+        }
+
         await expect(page.getByRole("button", { name: "Focus mode" })).toBeVisible();
 
         if (isMobileProject && system.hasQuickMenu) {
             await expect(
-                page.getByRole("button", { name: "D-Pad Up" }),
+                page.getByRole("application", { name: "Virtual joystick" }),
             ).toBeVisible();
             await expect(page.getByRole("button", { name: /Audio/ })).toBeHidden();
             await expect(
@@ -127,7 +172,7 @@ for (const system of systems) {
         await expect(page.getByRole("button", { name: "Show interface" })).toBeVisible();
         if (isMobileProject && system.hasQuickMenu) {
             await expect(
-                page.getByRole("button", { name: "D-Pad Up" }),
+                page.getByRole("application", { name: "Virtual joystick" }),
             ).toBeVisible();
         }
         await page.getByRole("button", { name: "Show interface" }).click();
@@ -162,9 +207,11 @@ for (const system of systems) {
     });
 }
 
-test("Nintendo DS can retry a failed CDN load without selecting the ROM again", async ({
-    page,
-}) => {
+test("Nintendo DS can retry a failed CDN load without selecting the ROM again", async (
+    { page },
+    testInfo,
+) => {
+    const isMobileProject = testInfo.project.name === "mobile-chromium";
     let loaderRequests = 0;
     await page.route("https://cdn.emulatorjs.org/**/loader.js", async (route) => {
         loaderRequests += 1;
@@ -190,8 +237,15 @@ test("Nintendo DS can retry a failed CDN load without selecting the ROM again", 
         .filter({ hasText: "retry-test.nds" });
     await retryCard.getByRole("button", { name: "Play" }).click();
 
+    if (isMobileProject) {
+        await expect(
+            page.getByRole("button", { name: "Show interface" }),
+        ).toBeVisible();
+    }
     await expect(page.getByText("Unable to start DS emulator")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(2);
+    await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(
+        isMobileProject ? 1 : 2,
+    );
     await page.getByRole("button", { name: "Retry" }).first().click();
     await expect(page.getByText("Unable to start DS emulator")).toBeVisible();
 
@@ -220,10 +274,13 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     const phonePage = await context.newPage();
     await phonePage.setViewportSize({ width: 844, height: 390 });
     await phonePage.goto(pairingUrl!);
-    await phonePage.getByRole("button", { name: "Connect" }).click();
+    await phonePage
+        .getByRole("dialog", { name: "Phone connection" })
+        .getByRole("button", { name: "Connect", exact: true })
+        .click();
 
     await expect(
-        phonePage.getByText("Your phone is now the controller."),
+        phonePage.getByRole("button", { name: "Connected" }),
     ).toBeVisible({ timeout: 15_000 });
     await expect(hostDialog.getByText("Connected", { exact: true })).toBeVisible({
         timeout: 15_000,
@@ -239,6 +296,45 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     });
     await expect(joystick).toHaveAttribute("aria-disabled", "false");
     await expect(phonePage.getByRole("button", { name: "Up" })).toHaveCount(0);
+
+    const joystickBounds = await joystick.boundingBox();
+    expect(joystickBounds).not.toBeNull();
+    const joystickThumb = joystick.locator("[data-joystick-thumb]");
+    const centeredTransform = await joystickThumb.evaluate(
+        (element) => getComputedStyle(element).transform,
+    );
+    const centerX = joystickBounds!.x + joystickBounds!.width / 2;
+    const centerY = joystickBounds!.y + joystickBounds!.height / 2;
+    await phonePage.mouse.move(centerX, centerY);
+    await phonePage.mouse.down();
+    await phonePage.mouse.move(
+        centerX - joystickBounds!.width * 0.25,
+        centerY,
+    );
+    await expect.poll(
+        () => joystickThumb.evaluate(
+            (element) => getComputedStyle(element).transform,
+        ),
+    ).not.toBe(centeredTransform);
+    await phonePage.mouse.up();
+    await expect.poll(
+        () => joystickThumb.evaluate(
+            (element) => getComputedStyle(element).transform,
+        ),
+    ).toBe(centeredTransform);
+
+    await phonePage.getByRole("button", { name: "Connected" }).click();
+    const connectionDialog = phonePage.getByRole("dialog", {
+        name: "Phone connection",
+    });
+    await expect(connectionDialog).toBeVisible();
+    await expect(
+        connectionDialog.getByRole("button", { name: "Disconnect" }),
+    ).toBeVisible();
+    await connectionDialog
+        .getByRole("button", { name: "Close phone connection" })
+        .click();
+    await expect(connectionDialog).toBeHidden();
 
     const controllerBounds = await phonePage
         .getByRole("region", { name: "Virtual controller" })

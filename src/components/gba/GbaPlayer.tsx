@@ -26,6 +26,7 @@ import { useAutoSaveOnClose } from "@/lib/hooks/useAutoSaveOnClose";
 import { useKeymap } from "@/lib/hooks/useKeymap";
 import { usePhoneController } from "@/lib/hooks/usePhoneController";
 import { defaultKeymap } from "@/lib/input";
+import { shouldAutoEnterPlayMode } from "@/lib/shouldAutoEnterPlayMode";
 import { getSaveState, type Slot } from "@/lib/storage/saveStateStore";
 import { getRomBytes, touchLastPlayed, setCoverArt } from "@/lib/storage/romStore";
 
@@ -213,6 +214,7 @@ export default function GbaPlayer() {
             setRomHashState(romHash);
             touchLastPlayed(romHash);
             setTab("emulator");
+            if (shouldAutoEnterPlayMode()) setMenuHidden(true);
             setMessage(`ROM loaded: ${name} (${bytes.length.toLocaleString()} bytes)`);
 
             try {

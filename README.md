@@ -11,6 +11,8 @@ browser and are never uploaded to an application server.
 | Game Boy Advance | Available | mGBA (WASM) | `.gba` |
 | Nintendo NES | Available | JSNES | `.nes` |
 | Nintendo DS | Available | EmulatorJS / DeSmuME 2015 | `.nds` |
+| Nintendo 3DS | Coming soon | — | `.3ds` |
+| Nintendo Wii | Coming soon | — | `.rvz` |
 | Super Nintendo | Coming soon | — | `.sfc` |
 | Game Boy | Coming soon | — | `.gb` |
 | PlayStation | Coming soon | — | `.cue` |

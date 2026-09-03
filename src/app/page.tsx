@@ -6,6 +6,8 @@ export default function Home() {
         { title: "Game Boy Advance", desc: "Portable 32-bit classics powered by mGBA WASM.", core: "mGBA", extension: ".gba", href: "/gba", disabled: false, image: "/images/gba.jpeg" },
         { title: "Nintendo NES", desc: "8-bit console games running through the JSNES core.", core: "JSNES", extension: ".nes", href: "/nes", disabled: false, image: "/images/nes.jpeg" },
         { title: "Nintendo DS", desc: "Dual-screen emulation powered by DeSmuME and EmulatorJS.", core: "DeSmuME", extension: ".nds", href: "/ds", disabled: false, image: "/images/ds.jpeg" },
+        { title: "Nintendo 3DS", desc: "Nintendo 3DS browser emulation is planned for a future release.", core: "Planned", extension: ".3ds", href: "#", disabled: true, image: "/images/3DS.jpeg" },
+        { title: "Nintendo Wii", desc: "Motion-controlled Wii emulation is planned for a future release.", core: "Planned", extension: ".rvz", href: "#", disabled: true, image: "/images/Nintendo-Wii.png" },
         { title: "PlayStation Portable", desc: "PSP emulation with the PPSSPP core is planned for a future release.", core: "PPSSPP", extension: ".iso", href: "#", disabled: true, image: "/images/psp.jpg" },
         { title: "Super Nintendo", desc: "The 16-bit console library is planned for a future release.", core: "Planned", extension: ".sfc", href: "#", disabled: true, image: "/images/SNES.jpeg" },
         { title: "Game Boy", desc: "Original handheld system support is coming soon.", core: "Planned", extension: ".gb", href: "#", disabled: true, image: "/images/gb.jpeg" },
@@ -30,7 +32,7 @@ export default function Home() {
                             Select a system
                         </h2>
                     </div>
-                    <span className="text-xs font-semibold text-(--muted)">3 of 7 available</span>
+                    <span className="text-xs font-semibold text-(--muted)">3 of 9 available</span>
                 </div>
 
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">

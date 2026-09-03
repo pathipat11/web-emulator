@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { VirtualJoystick } from "@/components/emulator/VirtualJoystick";
+import { useModalDialog } from "@/lib/hooks/useModalDialog";
 import type {
     PhoneControlMessage,
     PhoneControllerSystem,
@@ -24,6 +26,145 @@ const SYSTEM_BUTTONS: Record<PhoneControllerSystem, readonly string[]> = {
     gba: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "L", "R", "START", "SELECT"],
     nes: ["UP", "DOWN", "LEFT", "RIGHT", "A", "B", "START", "SELECT"],
 };
+
+function ConnectionDialog({
+    open,
+    code,
+    status,
+    system,
+    message,
+    onCodeChange,
+    onConnect,
+    onDisconnect,
+    onClose,
+}: {
+    open: boolean;
+    code: string;
+    status: ConnectionStatus;
+    system: PhoneControllerSystem | null;
+    message: string;
+    onCodeChange: (code: string) => void;
+    onConnect: () => void;
+    onDisconnect: () => void;
+    onClose: () => void;
+}) {
+    const dialogRef = useModalDialog<HTMLElement>(open, onClose);
+    if (!open) return null;
+
+    const connected = status === "connected" && system !== null;
+    const busy = status === "connecting" || status === "waiting";
+
+    return (
+        <div
+            className="fixed inset-0 z-60 grid place-items-center p-4"
+            role="presentation"
+        >
+            <button
+                type="button"
+                className="absolute inset-0 bg-black/65 backdrop-blur-sm"
+                onClick={onClose}
+                aria-label="Close phone connection"
+            />
+            <section
+                ref={dialogRef}
+                tabIndex={-1}
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="phone-connection-title"
+                className="relative z-10 w-full max-w-sm rounded-2xl border border-(--border) bg-(--panel) p-5 shadow-(--shadow-2)"
+            >
+                <div className="flex items-start justify-between gap-4">
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                            Phone Controller
+                        </div>
+                        <h2
+                            id="phone-connection-title"
+                            className="mt-1 text-xl font-black"
+                        >
+                            Phone connection
+                        </h2>
+                    </div>
+                    <button
+                        type="button"
+                        onClick={onClose}
+                        className="grid h-9 w-9 place-items-center rounded-lg border border-(--border) text-(--muted)"
+                        aria-label="Close phone connection"
+                    >
+                        <span aria-hidden="true">✕</span>
+                    </button>
+                </div>
+
+                {connected ? (
+                    <div className="mt-5 rounded-2xl border border-(--success-border) bg-(--success-soft) p-4 text-center">
+                        <span className="mx-auto block h-3 w-3 rounded-full bg-(--success)" />
+                        <div className="mt-2 font-black text-(--success)">
+                            Connected
+                        </div>
+                        <div className="mt-1 text-xs uppercase text-(--muted)">
+                            {system}
+                        </div>
+                    </div>
+                ) : (
+                    <label
+                        htmlFor="pairing-code"
+                        className="mt-5 block text-[10px] font-black uppercase tracking-[0.16em] text-(--muted)"
+                    >
+                        Pairing code
+                        <input
+                            id="pairing-code"
+                            value={code}
+                            onChange={(event) => onCodeChange(
+                                event.target.value.replace(/\D/g, "").slice(0, 6),
+                            )}
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            pattern="[0-9]*"
+                            maxLength={6}
+                            disabled={busy}
+                            data-autofocus
+                            className="mt-2 w-full rounded-xl border border-(--border) bg-(--panel-2) px-4 py-3 text-center font-mono text-2xl font-black tracking-[0.22em]"
+                            placeholder="000000"
+                        />
+                    </label>
+                )}
+
+                <p
+                    className={[
+                        "mt-4 text-sm leading-relaxed",
+                        status === "error"
+                            ? "text-(--danger)"
+                            : "text-(--muted)",
+                    ].join(" ")}
+                    role="status"
+                >
+                    {message}
+                </p>
+
+                <div className="mt-5 flex justify-end gap-2">
+                    {connected ? (
+                        <button
+                            type="button"
+                            onClick={onDisconnect}
+                            className="rounded-xl border border-(--danger) px-4 py-2 text-xs font-bold text-(--danger)"
+                        >
+                            Disconnect
+                        </button>
+                    ) : (
+                        <button
+                            type="button"
+                            onClick={onConnect}
+                            disabled={busy}
+                            className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) disabled:opacity-40"
+                        >
+                            {busy ? "Connecting..." : "Connect"}
+                        </button>
+                    )}
+                </div>
+            </section>
+        </div>
+    );
+}
 
 function ControllerButton({
     label,
@@ -61,144 +202,15 @@ function ControllerButton({
             onPointerUp={(event) => {
                 event.preventDefault();
                 onRelease(button);
+                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+                    event.currentTarget.releasePointerCapture(event.pointerId);
+                }
             }}
             onPointerCancel={() => onRelease(button)}
             onLostPointerCapture={() => onRelease(button)}
         >
             {label}
         </button>
-    );
-}
-
-const JOYSTICK_DIRECTIONS = ["UP", "DOWN", "LEFT", "RIGHT"] as const;
-
-function VirtualJoystick({
-    onPress,
-    onRelease,
-    disabled,
-}: {
-    onPress: (button: string) => void;
-    onRelease: (button: string) => void;
-    disabled: boolean;
-}) {
-    const [position, setPosition] = useState({ x: 0, y: 0 });
-    const activeDirectionsRef = useRef(new Set<string>());
-
-    const releaseDirections = useCallback(() => {
-        for (const direction of activeDirectionsRef.current) {
-            onRelease(direction);
-        }
-        activeDirectionsRef.current.clear();
-        setPosition({ x: 0, y: 0 });
-    }, [onRelease]);
-
-    const updateJoystick = useCallback(
-        (
-            clientX: number,
-            clientY: number,
-            element: HTMLDivElement,
-        ) => {
-            const rect = element.getBoundingClientRect();
-            const rawX = clientX - (rect.left + rect.width / 2);
-            const rawY = clientY - (rect.top + rect.height / 2);
-            const maxDistance = Math.min(rect.width, rect.height) * 0.3;
-            const distance = Math.hypot(rawX, rawY);
-            const scale = distance > maxDistance ? maxDistance / distance : 1;
-            const x = rawX * scale;
-            const y = rawY * scale;
-            const normalizedX = x / maxDistance;
-            const normalizedY = y / maxDistance;
-            const deadzone = 0.28;
-            const nextDirections = new Set<string>();
-
-            if (normalizedX < -deadzone) nextDirections.add("LEFT");
-            if (normalizedX > deadzone) nextDirections.add("RIGHT");
-            if (normalizedY < -deadzone) nextDirections.add("UP");
-            if (normalizedY > deadzone) nextDirections.add("DOWN");
-
-            for (const direction of activeDirectionsRef.current) {
-                if (!nextDirections.has(direction)) onRelease(direction);
-            }
-            for (const direction of nextDirections) {
-                if (!activeDirectionsRef.current.has(direction)) onPress(direction);
-            }
-
-            activeDirectionsRef.current = nextDirections;
-            setPosition({ x, y });
-        },
-        [onPress, onRelease],
-    );
-
-    return (
-        <div
-            role="application"
-            aria-label="Virtual joystick"
-            aria-disabled={disabled}
-            className={[
-                "relative aspect-square w-[clamp(7rem,32vw,12rem)] touch-none select-none rounded-full border border-(--border) bg-(--panel-2) shadow-(--shadow) transition landscape:w-[clamp(8rem,44vmin,12rem)]",
-                disabled ? "opacity-40" : "",
-            ].join(" ")}
-            onContextMenu={(event) => event.preventDefault()}
-            onPointerDown={(event) => {
-                if (disabled) return;
-                event.preventDefault();
-                event.currentTarget.setPointerCapture(event.pointerId);
-                updateJoystick(
-                    event.clientX,
-                    event.clientY,
-                    event.currentTarget,
-                );
-                navigator.vibrate?.(8);
-            }}
-            onPointerMove={(event) => {
-                if (
-                    disabled ||
-                    !event.currentTarget.hasPointerCapture(event.pointerId)
-                ) return;
-                event.preventDefault();
-                updateJoystick(
-                    event.clientX,
-                    event.clientY,
-                    event.currentTarget,
-                );
-            }}
-            onPointerUp={(event) => {
-                event.preventDefault();
-                releaseDirections();
-                if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-                    event.currentTarget.releasePointerCapture(event.pointerId);
-                }
-            }}
-            onPointerCancel={releaseDirections}
-            onLostPointerCapture={releaseDirections}
-        >
-            <div className="absolute inset-[12%] rounded-full border border-(--border) bg-(--panel-3)" />
-            {JOYSTICK_DIRECTIONS.map((direction) => (
-                <span
-                    key={direction}
-                    aria-hidden="true"
-                    className={[
-                        "absolute h-1.5 w-1.5 rounded-full bg-(--muted)",
-                        direction === "UP"
-                            ? "left-1/2 top-[8%] -translate-x-1/2"
-                            : direction === "DOWN"
-                                ? "bottom-[8%] left-1/2 -translate-x-1/2"
-                                : direction === "LEFT"
-                                    ? "left-[8%] top-1/2 -translate-y-1/2"
-                                    : "right-[8%] top-1/2 -translate-y-1/2",
-                    ].join(" ")}
-                />
-            ))}
-            <div
-                aria-hidden="true"
-                className="absolute left-1/2 top-1/2 grid h-[42%] w-[42%] -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-(--accent-border) bg-(--accent) shadow-(--shadow-2) transition-transform duration-75"
-                style={{
-                    transform: `translate(calc(-50% + ${position.x}px), calc(-50% + ${position.y}px))`,
-                }}
-            >
-                <span className="h-[34%] w-[34%] rounded-full bg-(--accent-text)/35" />
-            </div>
-        </div>
     );
 }
 
@@ -215,6 +227,7 @@ export default function PhoneControllerClient({
             ? "Ready to connect to the emulator."
             : "Enter the six-digit code shown on the emulator.",
     );
+    const [connectionOpen, setConnectionOpen] = useState(Boolean(initialCode));
     const peerRef = useRef<RTCPeerConnection | null>(null);
     const channelRef = useRef<RTCDataChannel | null>(null);
     const pressedButtonsRef = useRef(new Set<string>());
@@ -304,12 +317,14 @@ export default function PhoneControllerClient({
                     if (generation !== generationRef.current) return;
                     setStatus("connected");
                     setMessage("Connected. Your phone is now the controller.");
+                    setConnectionOpen(false);
                 });
                 channel.addEventListener("close", () => {
                     releaseAll();
                     if (generation !== generationRef.current) return;
                     setStatus("error");
                     setMessage("The emulator disconnected.");
+                    setConnectionOpen(true);
                 });
             });
             peer.addEventListener("connectionstatechange", () => {
@@ -320,6 +335,7 @@ export default function PhoneControllerClient({
                 releaseAll();
                 setStatus("error");
                 setMessage("Unable to establish a direct controller connection.");
+                setConnectionOpen(true);
             });
 
             await peer.setRemoteDescription(session.offer);
@@ -357,6 +373,7 @@ export default function PhoneControllerClient({
             channelRef.current = null;
             setStatus("error");
             setMessage(error instanceof Error ? error.message : String(error));
+            setConnectionOpen(true);
         }
     }, [code, disconnect, releaseAll]);
 
@@ -389,87 +406,37 @@ export default function PhoneControllerClient({
                             Phone Controller
                         </h1>
                     </div>
-                    <Link
-                        href="/"
-                        className="rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted)"
-                    >
-                        Systems
-                    </Link>
+                    <div className="flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={() => setConnectionOpen(true)}
+                            className="flex items-center gap-2 rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted)"
+                        >
+                            <span
+                                className={[
+                                    "h-2 w-2 rounded-full",
+                                    connected
+                                        ? "bg-(--success)"
+                                        : status === "error"
+                                            ? "bg-(--danger)"
+                                            : "bg-(--muted)",
+                                ].join(" ")}
+                                aria-hidden="true"
+                            />
+                            {connected
+                                ? "Connected"
+                                : status === "connecting" || status === "waiting"
+                                    ? "Connecting"
+                                    : "Connect"}
+                        </button>
+                        <Link
+                            href="/"
+                            className="rounded-lg border border-(--border) px-3 py-1.5 text-xs font-bold text-(--muted)"
+                        >
+                            Systems
+                        </Link>
+                    </div>
                 </header>
-
-                <section className="mt-2 shrink-0 rounded-xl border border-(--border) bg-(--panel) p-2 sm:px-3">
-                    {connected ? (
-                        <div className="flex items-center justify-between gap-3">
-                            <div className="min-w-0">
-                                <div className="flex items-center gap-2">
-                                    <span className="h-2 w-2 rounded-full bg-(--success)" />
-                                    <span className="text-xs font-black text-(--success)">
-                                        Connected
-                                    </span>
-                                    {system && (
-                                        <span className="rounded-md bg-(--panel-2) px-2 py-0.5 text-[10px] font-black uppercase text-(--accent)">
-                                            {system}
-                                        </span>
-                                    )}
-                                </div>
-                                <p className="truncate text-[10px] text-(--muted)">
-                                    Your phone is now the controller.
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => disconnect(true)}
-                                className="shrink-0 rounded-lg border border-(--danger) px-3 py-1.5 text-xs font-bold text-(--danger)"
-                            >
-                                Disconnect
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="flex items-end gap-2">
-                            <label
-                                htmlFor="pairing-code"
-                                className="min-w-0 flex-1 text-[9px] font-black uppercase tracking-[0.16em] text-(--muted)"
-                            >
-                                Pairing code
-                                <input
-                                    id="pairing-code"
-                                    value={code}
-                                    onChange={(event) => {
-                                        setCode(
-                                            event.target.value
-                                                .replace(/\D/g, "")
-                                                .slice(0, 6),
-                                        );
-                                    }}
-                                    inputMode="numeric"
-                                    autoComplete="one-time-code"
-                                    pattern="[0-9]*"
-                                    maxLength={6}
-                                    disabled={
-                                        status === "connecting" ||
-                                        status === "waiting"
-                                    }
-                                    className="mt-1 w-full rounded-lg border border-(--border) bg-(--panel-2) px-3 py-1.5 text-center font-mono text-base font-black tracking-[0.18em]"
-                                    placeholder="000000"
-                                />
-                            </label>
-                            <button
-                                type="button"
-                                onClick={() => void connect()}
-                                disabled={
-                                    status === "connecting" ||
-                                    status === "waiting"
-                                }
-                                className="rounded-lg bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) disabled:opacity-40"
-                            >
-                                Connect
-                            </button>
-                            <span className="hidden min-w-0 flex-1 truncate text-[10px] text-(--muted) sm:block" role="status">
-                                {message}
-                            </span>
-                        </div>
-                    )}
-                </section>
 
                 <section
                     className="mt-2 flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-(--border) bg-(--panel) p-2 sm:p-3"
@@ -492,9 +459,11 @@ export default function PhoneControllerClient({
                             )}
                             <VirtualJoystick
                                 key={connected ? "connected" : "disconnected"}
-                                onPress={press}
-                                onRelease={release}
+                                className="w-[clamp(7rem,32vw,12rem)] shadow-(--shadow) landscape:w-[clamp(8rem,44vmin,12rem)]"
+                                onPress={(direction) => press(direction)}
+                                onRelease={(direction) => release(direction)}
                                 disabled={!connected}
+                                haptic
                             />
                         </div>
 
@@ -555,6 +524,17 @@ export default function PhoneControllerClient({
                     )}
                 </section>
             </div>
+            <ConnectionDialog
+                open={connectionOpen}
+                code={code}
+                status={status}
+                system={system}
+                message={message}
+                onCodeChange={setCode}
+                onConnect={() => void connect()}
+                onDisconnect={() => disconnect(true)}
+                onClose={() => setConnectionOpen(false)}
+            />
         </main>
     );
 }

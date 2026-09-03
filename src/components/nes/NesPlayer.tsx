@@ -33,6 +33,7 @@ import {
     putNesMeta,
 } from "@/lib/storage/nesSaveStateStore";
 import { usePhoneController } from "@/lib/hooks/usePhoneController";
+import { shouldAutoEnterPlayMode } from "@/lib/shouldAutoEnterPlayMode";
 
 type Tab = "emulator" | "library";
 
@@ -164,6 +165,7 @@ export default function NesPlayer() {
             setRomHashState(romHash);
             touchNesLastPlayed(romHash);
             setTab("emulator");
+            if (shouldAutoEnterPlayMode()) setMenuHidden(true);
             setMessage(`ROM loaded: ${name} (${bytes.length.toLocaleString()} bytes)`);
 
             try {

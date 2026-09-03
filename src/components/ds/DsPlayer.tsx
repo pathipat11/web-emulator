@@ -11,6 +11,7 @@ import {
     getDsRomBytes,
     touchDsLastPlayed,
 } from "@/lib/storage/dsRomStore";
+import { shouldAutoEnterPlayMode } from "@/lib/shouldAutoEnterPlayMode";
 
 const DS_FRAME_READY = "web-emulator:ds-frame-ready";
 const DS_LOAD_ROM = "web-emulator:load-ds-rom";
@@ -409,6 +410,7 @@ export default function DsPlayer() {
             setRomHashState(romHash);
             touchDsLastPlayed(romHash);
             setTab("emulator");
+            if (shouldAutoEnterPlayMode()) setMenuHidden(true);
             launchRom(bytes, name);
         },
         [launchRom],

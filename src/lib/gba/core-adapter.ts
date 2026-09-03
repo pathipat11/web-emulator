@@ -236,6 +236,14 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
 
             await Module.FSInit();
 
+            // The app owns save-state persistence and auto-load behavior. Disable
+            // mGBA's separate auto-state system so quickReload performs a clean
+            // ROM reset instead of restoring its latest internal auto save.
+            Module.setCoreSettings?.({
+                autoSaveStateEnable: false,
+                restoreAutoSaveStateOnLoad: false,
+            });
+
             try {
                 Module.FS.mkdir("/roms");
             } catch {
@@ -280,14 +288,21 @@ export async function createMgbaWasmCore(): Promise<GbaCore> {
         },
 
         reset() {
-            if (!Module) return;
-            Module.quickReload?.();
+            const mgbaModule = requireModule();
+            if (typeof mgbaModule.quickReload !== "function") {
+                throw new Error("This mGBA build does not expose ROM reset.");
+            }
 
-            if (audioOn) Module.resumeAudio?.();
-            else Module.pauseAudio?.();
+            mgbaModule.quickReload();
+            // quickReload resets the ROM but does not guarantee that a paused
+            // Emscripten main loop resumes.
+            mgbaModule.resumeGame?.();
+
+            if (audioOn) mgbaModule.resumeAudio?.();
+            else mgbaModule.pauseAudio?.();
 
             // ✅ apply turbo after reset
-            applyTurboToModule(Module, turboRate);
+            applyTurboToModule(mgbaModule, turboRate);
 
             core.status = "running";
         },

@@ -89,36 +89,68 @@ export function NesRomLibrary({ onPlay }: Props) {
             <NesRomDropzone onFile={handleImport} />
 
             {toast && (
-                <div className="rounded-(--radius) border bg-(--accent) px-4 py-2 text-sm font-medium text-white border-transparent" role="status">
+                <div className="rounded-(--radius) border border-transparent bg-(--accent) px-4 py-2 text-sm font-medium text-(--accent-text)" role="status">
                     {toast}
                 </div>
             )}
 
             {list.length === 0 ? (
-                <div className="py-8 text-center text-sm text-(--muted)">
-                    No ROMs in library yet. Drop a .nes file above to get started.
+                <div className="rounded-(--radius) border border-(--border) bg-(--panel) py-12 text-center">
+                    <div className="text-sm font-bold text-(--text)">Library is empty</div>
+                    <div className="mt-1 text-xs text-(--muted)">Add a .nes ROM above</div>
                 </div>
             ) : (
-                <div className="space-y-2">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                     {list.map((entry) => (
-                        <div key={entry.romHash} className="flex items-center gap-3 rounded-(--radius) border bg-(--panel) border-(--border) p-3 transition hover:shadow-(--shadow)">
-                            {entry.coverDataUrl ? (
-                                <img src={entry.coverDataUrl} alt={entry.name} className="h-12 w-16 rounded object-cover pixel-perfect" />
-                            ) : (
-                                <div className="grid h-12 w-16 place-items-center rounded bg-(--panel-2) text-lg">🎮</div>
-                            )}
-                            <div className="min-w-0 flex-1">
-                                <div className="truncate text-sm font-semibold text-(--text)">{entry.name}</div>
-                                <div className="text-xs text-(--muted)">
+                        <article
+                            key={entry.romHash}
+                            className="group overflow-hidden rounded-(--radius) border border-(--border) bg-(--panel) transition hover:border-(--accent-border)"
+                        >
+                            <div className="aspect-4/3 overflow-hidden bg-(--panel-2)">
+                                {entry.coverDataUrl ? (
+                                    <img
+                                        src={entry.coverDataUrl}
+                                        alt=""
+                                        className="h-full w-full object-cover pixel-perfect transition duration-300 group-hover:scale-[1.02]"
+                                    />
+                                ) : (
+                                    <div className="grid h-full place-items-center">
+                                        <span className="rounded-lg border border-(--border) px-3 py-2 font-mono text-xs font-black text-(--muted)">
+                                            NES
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="flex min-h-35 flex-col p-4">
+                                <div className="truncate text-sm font-bold text-(--text)" title={entry.name}>
+                                    {entry.name}
+                                </div>
+                                <div className="mt-1 text-[11px] text-(--muted)">
                                     {fmtSize(entry.size)} · Added {fmtDate(entry.addedAt)}
-                                    {entry.lastPlayedAt ? ` · Played ${fmtDate(entry.lastPlayedAt)}` : ""}
+                                </div>
+                                {entry.lastPlayedAt && (
+                                    <div className="mt-1 text-[11px] text-(--muted)">
+                                        Played {fmtDate(entry.lastPlayedAt)}
+                                    </div>
+                                )}
+                                <div className="mt-auto grid grid-cols-2 gap-2 pt-4">
+                                    <button
+                                        onClick={() => handlePlay(entry)}
+                                        className="rounded-xl bg-(--accent) px-3 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105"
+                                        type="button"
+                                    >
+                                        Play
+                                    </button>
+                                    <button
+                                        onClick={() => setDeleteTarget(entry)}
+                                        className="rounded-xl border border-(--border) px-3 py-2 text-xs font-bold text-(--muted) transition hover:border-(--danger) hover:text-(--danger)"
+                                        type="button"
+                                    >
+                                        Delete
+                                    </button>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                                <button onClick={() => handlePlay(entry)} className="rounded-xl border px-3 py-1.5 text-xs font-medium text-white transition active:translate-y-px bg-(--accent) border-(--border) hover:brightness-105" type="button">Play</button>
-                                <button onClick={() => setDeleteTarget(entry)} className="rounded-xl border px-3 py-1.5 text-xs transition active:translate-y-px border-(--border) text-(--muted) hover:text-red-500" type="button">Delete</button>
-                            </div>
-                        </div>
+                        </article>
                     ))}
                 </div>
             )}

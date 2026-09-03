@@ -14,6 +14,7 @@ import { GbaConsole } from "@/components/gba/GbaConsole";
 import { MobileControls } from "@/components/gba/MobileControls";
 import { SettingsPanel } from "@/components/gba/SettingsPanel";
 import { ConfirmDialog } from "@/components/gba/ConfirmDialog";
+import { EmulatorQuickMenu } from "@/components/emulator/QuickMenu";
 import { RomLibrary } from "@/components/gba/RomLibrary";
 import Link from "next/link";
 
@@ -52,11 +53,13 @@ export default function GbaPlayer() {
     const [romName, setRomName] = useState("-");
     const [romHashState, setRomHashState] = useState("");
     const [status, setStatus] = useState<"idle" | "running" | "paused">("idle");
+    const [coreState, setCoreState] = useState<"loading" | "ready" | "error">("loading");
     const [message, setMessage] = useState("Upload a .gba ROM to begin.");
 
     const [gamepadInfo, setGamepadInfo] = useState("No controller");
     const [showSettings, setShowSettings] = useState(false);
     const [settingsOpen, setSettingsOpen] = useState(false);
+    const [showQuickMenu, setShowQuickMenu] = useState(false);
     const [showEjectConfirm, setShowEjectConfirm] = useState(false);
     const [saveVersion, setSaveVersion] = useState(0);
     const [menuHidden, setMenuHidden] = useState(false);
@@ -90,8 +93,9 @@ export default function GbaPlayer() {
     const { keymap, setKey: setKeymapKey, resetToDefaults: resetKeymap } = useKeymap<GbaButton>("gba:keymap", defaultKeymap);
 
     // inputs
-    useKeyboardInput(coreRef, keymap);
-    useGamepadInput(coreRef, defaultGamepadMapping, setGamepadInfo);
+    const gameplayInputEnabled = !showQuickMenu && !showSettings && !showEjectConfirm;
+    useKeyboardInput(coreRef, keymap, gameplayInputEnabled);
+    useGamepadInput(coreRef, defaultGamepadMapping, setGamepadInfo, gameplayInputEnabled);
 
     // init core + canvas
     useEffect(() => {
@@ -109,9 +113,11 @@ export default function GbaPlayer() {
 
                 c.setAudioEnabled?.(audioEnabledRef.current);
 
+                setCoreState("ready");
                 setMessage("mGBA core ready. Upload a .gba ROM.");
             } catch (err: any) {
                 console.error(err);
+                setCoreState("error");
                 setMessage(`Failed to init core: ${err?.message ?? String(err)}`);
             }
         })();
@@ -141,6 +147,15 @@ export default function GbaPlayer() {
 
     async function onUpload(file: File | null) {
         if (!file) return;
+
+        if (coreState !== "ready") {
+            setMessage(
+                coreState === "loading"
+                    ? "mGBA core is still loading."
+                    : "mGBA core is unavailable. Reload the page and try again.",
+            );
+            return;
+        }
 
         if (!file.name.toLowerCase().endsWith(".gba")) {
             setMessage("Please upload a .gba file.");
@@ -219,6 +234,15 @@ export default function GbaPlayer() {
     /** Load a ROM from the library by hash (no file picker needed) */
     const loadRomFromLibrary = useCallback(
         async (romHash: string, name: string) => {
+            if (coreState !== "ready") {
+                setMessage(
+                    coreState === "loading"
+                        ? "mGBA core is still loading."
+                        : "mGBA core is unavailable. Reload the page and try again.",
+                );
+                return;
+            }
+
             // stop current game before loading a new one
             const prev = coreRef.current;
             if (prev && prev.status !== "idle") {
@@ -270,7 +294,7 @@ export default function GbaPlayer() {
             }
         },
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [autoLoadOnRom, autoSaveSlot, turbo, romHashState],
+        [autoLoadOnRom, autoSaveSlot, coreState, turbo, romHashState],
     );
 
     function onToggleRun() {
@@ -294,10 +318,17 @@ export default function GbaPlayer() {
         const c = coreRef.current;
         if (!c) return;
 
-        c.reset();
-        setStatus(c.status);
-        c.setAudioEnabled?.(audioEnabledRef.current);
-        setMessage("Reset.");
+        try {
+            c.reset();
+            setStatus(c.status);
+            c.setAudioEnabled?.(audioEnabledRef.current);
+            setMessage("Reset.");
+        } catch (error) {
+            setStatus(c.status);
+            setMessage(
+                `Reset failed: ${error instanceof Error ? error.message : String(error)}`
+            );
+        }
     }
 
     function onEject() {
@@ -459,6 +490,7 @@ export default function GbaPlayer() {
     }
 
     function openSettings() {
+        setShowQuickMenu(false);
         setShowSettings(true);
         requestAnimationFrame(() => setSettingsOpen(true));
     }
@@ -468,23 +500,15 @@ export default function GbaPlayer() {
         window.setTimeout(() => setShowSettings(false), 220);
     }
 
-    useEffect(() => {
-        if (!showSettings) return;
-
-        const onKeyDown = (e: KeyboardEvent) => {
-            if (e.key === "Escape") closeSettings();
-        };
-
-        window.addEventListener("keydown", onKeyDown);
-        return () => window.removeEventListener("keydown", onKeyDown);
-    }, [showSettings]);
-
     // F2 shortcut to toggle menu visibility
     useEffect(() => {
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === "F2") {
                 e.preventDefault();
-                setMenuHidden((h) => !h);
+                setMenuHidden((hidden) => {
+                    if (!hidden) setTab("emulator");
+                    return !hidden;
+                });
             }
         };
         window.addEventListener("keydown", onKeyDown);
@@ -499,184 +523,236 @@ export default function GbaPlayer() {
     }
 
     return (
-        <div className={[
-            "mx-auto w-full max-w-5xl",
-            menuHidden ? "flex min-h-screen flex-col items-center justify-center" : "p-4 lg:p-6",
-        ].join(" ")}>
-            {/* Floating toggle button — always visible */}
-            <button
-                onClick={() => setMenuHidden((h) => !h)}
-                className="fixed right-4 top-4 z-30 rounded-full border bg-(--panel) border-(--border) px-3 py-1.5 text-xs shadow-md hover:-translate-y-px transition"
-                type="button"
-                aria-label={menuHidden ? "Show menu" : "Hide menu"}
-                title={`${menuHidden ? "Show" : "Hide"} menu (F2)`}
-            >
-                {menuHidden ? "☰ Show" : "✕ Hide"}
-            </button>
+        <div className="min-h-screen bg-(--bg)">
+            {menuHidden ? (
+                <button
+                    onClick={() => setMenuHidden(false)}
+                    className="fixed right-4 top-4 z-30 rounded-xl border border-(--border) bg-(--panel-translucent) px-3 py-2 text-xs font-bold shadow-(--shadow) backdrop-blur transition hover:border-(--accent-border)"
+                    type="button"
+                    title="Show interface (F2)"
+                >
+                    Show interface
+                </button>
+            ) : (
+                <header className="sticky top-0 z-30 border-b border-(--border) bg-(--bg-translucent) backdrop-blur-xl">
+                    <div className="mx-auto flex min-h-18 w-full max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <Link
+                                href="/"
+                                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-(--accent) text-xs font-black text-(--accent-text) shadow-(--accent-shadow)"
+                                aria-label="Back to systems"
+                                title="Back to systems"
+                            >
+                                GBA
+                            </Link>
+                            <div className="min-w-0">
+                                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                                    mGBA core
+                                </div>
+                                <h1 className="truncate text-lg font-black tracking-tight sm:text-xl">
+                                    Game Boy Advance
+                                </h1>
+                            </div>
+                        </div>
 
-            {/* Header */}
-            <div className={[
-                "mb-4 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between transition-all duration-200",
-                menuHidden ? "hidden" : "",
-            ].join(" ")}>
-                <div>
-                    <div className="text-2xl font-bold tracking-tight">GBA Emulator</div>
-                    <div className="text-sm text-(--muted)">Upload .gba → Play in browser (mGBA WASM)</div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                    <Link
-                        href="/"
-                        className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text) hover:-translate-y-px transition"
-                    >
-                        ← Home
-                    </Link>
-
-                    <span className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text)">
-                        Controller: {gamepadInfo}
-                    </span>
-
-                    <ThemeToggle />
-
-                    <button
-                        onClick={openSettings}
-                        className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text) hover:-translate-y-px transition"
-                        type="button"
-                    >
-                        ⚙ Settings
-                    </button>
-                </div>
-            </div>
-
-            {/* Tab bar */}
-            <div className={[
-                "mb-4 flex gap-1 rounded-(--radius) border bg-(--panel) border-(--border) p-1",
-                menuHidden ? "hidden" : "",
-            ].join(" ")}>
-                {(["emulator", "library"] as const).map((t) => (
-                    <button
-                        key={t}
-                        onClick={() => setTab(t)}
-                        className={[
-                            "flex-1 rounded-(--radius) px-4 py-2 text-sm font-medium transition",
-                            tab === t
-                                ? "bg-(--accent) text-white shadow-sm"
-                                : "text-(--muted) hover:text-(--text)",
-                        ].join(" ")}
-                        type="button"
-                    >
-                        {t === "emulator" ? "🎮 Emulator" : "📚 Library"}
-                    </button>
-                ))}
-            </div>
-
-            {/* Emulator — always mounted, hidden when on library tab */}
-            <div className={tab !== "emulator" ? "hidden" : "w-full"}>
-                {/* Controls bar */}
-                <div className={[
-                    "flex flex-wrap items-center justify-between gap-3",
-                    menuHidden ? "hidden" : "",
-                ].join(" ")}>
-                    <div className="flex items-center gap-3">
-                        <div className="text-sm font-medium text-(--text) truncate max-w-48">{romName !== "-" ? romName : "No ROM"}</div>
-                        <div className={[
-                            "h-2 w-2 rounded-full",
-                            status === "running" ? "bg-green-400 shadow-[0_0_6px_rgba(74,222,128,0.5)]"
-                                : status === "paused" ? "bg-yellow-400"
-                                    : "bg-(--muted)/40",
-                        ].join(" ")} />
+                        <div className="flex shrink-0 items-center gap-2">
+                            <span className="hidden max-w-52 truncate rounded-xl border border-(--border) bg-(--panel) px-3 py-2 text-xs text-(--muted) md:block">
+                                {gamepadInfo}
+                            </span>
+                            <ThemeToggle />
+                            <button
+                                type="button"
+                                onClick={() => setShowQuickMenu(true)}
+                                className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2.5 text-xs font-bold transition hover:border-(--accent-border) hover:bg-(--panel-2)"
+                            >
+                                Quick Menu
+                            </button>
+                        </div>
                     </div>
+                </header>
+            )}
 
-                    <div className="flex flex-wrap items-center gap-2">
-                        <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border bg-(--panel) px-3 py-2 text-xs border-(--border)">
-                            <input
-                                type="checkbox"
-                                className="h-4 w-4"
-                                checked={audioEnabled}
-                                onChange={(e) => setAudioEnabled(e.target.checked)}
-                            />
-                            Audio
-                        </label>
-
-                        <button
-                            onClick={onToggleRun}
-                            className="rounded-xl border px-4 py-2 text-xs text-white disabled:opacity-50 transition active:translate-y-px border-(--border) bg-(--accent) hover:brightness-105"
-                            disabled={status === "idle"}
-                            type="button"
-                        >
-                            {status === "running" ? "Pause" : "Run"}
-                        </button>
-
-                        <button
-                            onClick={onReset}
-                            className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                            disabled={status === "idle"}
-                            type="button"
-                        >
-                            Reset
-                        </button>
-
-                        <button
-                            onClick={() => setShowEjectConfirm(true)}
-                            className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50 hover:text-red-500 transition"
-                            disabled={status === "idle"}
-                            type="button"
-                        >
-                            Eject
-                        </button>
+            <main className={[
+                "mx-auto w-full",
+                menuHidden
+                    ? "flex min-h-screen max-w-7xl items-center px-4 sm:px-6 lg:px-8"
+                    : "max-w-7xl px-4 pb-8 pt-5 sm:px-6 lg:px-8",
+            ].join(" ")}>
+                {!menuHidden && (
+                    <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+                        <div className="inline-flex rounded-xl border border-(--border) bg-(--panel) p-1">
+                            {(["emulator", "library"] as const).map((nextTab) => (
+                                <button
+                                    key={nextTab}
+                                    onClick={() => setTab(nextTab)}
+                                    className={[
+                                        "rounded-lg px-4 py-2 text-xs font-bold transition",
+                                        tab === nextTab
+                                            ? "bg-(--accent) text-(--accent-text)"
+                                            : "text-(--muted) hover:bg-(--panel-2) hover:text-(--text)",
+                                    ].join(" ")}
+                                    type="button"
+                                >
+                                    {nextTab === "emulator" ? "Player" : "Library"}
+                                </button>
+                            ))}
+                        </div>
 
                         <button
-                            onClick={onFullscreen}
-                            className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                            disabled={status === "idle"}
                             type="button"
-                        >
-                            Fullscreen
-                        </button>
-
-                        <button
-                            onClick={onScreenshot}
-                            className="rounded-xl border border-(--border) px-4 py-2 text-xs disabled:opacity-50"
-                            disabled={status === "idle"}
-                            type="button"
-                        >
-                            Screenshot
-                        </button>
-                    </div>
-                </div>
-
-                {/* Screen — full width, no extra wrapper */}
-                <GbaConsole canvasRef={canvasRef} status={status} />
-
-                {/* Mobile touch controls */}
-                <MobileControls onPress={press} onRelease={release} />
-
-                {/* Bottom row */}
-                <div className={[
-                    "mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between",
-                    menuHidden ? "hidden" : "",
-                ].join(" ")}>
-                    <div className="text-sm text-(--muted)">{message}</div>
-
-                    <label className="inline-flex items-center gap-2">
-                        <input
-                            ref={fileInputRef}
-                            type="file"
-                            accept=".gba"
-                            className="block w-full text-sm file:mr-3 file:rounded-xl file:border-0 file:bg-(--panel-2) file:px-4 file:py-2 file:text-sm file:font-medium hover:file:bg-(--panel-3)"
-                            onChange={(e) => {
-                                onUpload(e.target.files?.[0] ?? null);
-                                e.target.value = "";
+                            onClick={() => {
+                                setTab("emulator");
+                                setMenuHidden(true);
                             }}
-                        />
-                    </label>
+                            className="rounded-xl border border-(--border) bg-(--panel) px-3 py-2 text-xs font-bold text-(--muted) transition hover:border-(--accent-border) hover:text-(--text)"
+                            title="Hide interface (F2)"
+                        >
+                            Focus mode
+                        </button>
+                    </div>
+                )}
+
+                <div className={tab !== "emulator" ? "hidden" : "w-full"}>
+                    {!menuHidden && (
+                        <div className="flex flex-col gap-3 rounded-2xl border border-(--border) bg-(--panel) p-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-center gap-3">
+                                <span className={[
+                                    "h-2.5 w-2.5 shrink-0 rounded-full",
+                                    coreState === "error"
+                                        ? "bg-(--danger)"
+                                        : coreState === "loading"
+                                            ? "bg-(--warning)"
+                                            : status === "running"
+                                        ? "bg-(--success)"
+                                        : status === "paused"
+                                            ? "bg-(--warning)"
+                                            : "bg-(--muted)",
+                                ].join(" ")} />
+                                <div className="min-w-0">
+                                    <div className="truncate text-sm font-bold">
+                                        {romName !== "-" ? romName : "No ROM loaded"}
+                                    </div>
+                                    <div className="text-[11px] text-(--muted)">
+                                        {coreState === "loading"
+                                            ? "Core loading"
+                                            : coreState === "error"
+                                                ? "Core unavailable"
+                                                : status === "running"
+                                                    ? "Running"
+                                                    : status === "paused"
+                                                        ? "Paused"
+                                                        : "Ready"}
+                                        {romHashState ? ` · #${romHashState.slice(0, 8)}` : ""}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setAudioEnabled((enabled) => !enabled)}
+                                    className="rounded-xl border border-(--border) px-3 py-2 text-xs font-bold transition hover:bg-(--panel-2)"
+                                >
+                                    Audio {audioEnabled ? "On" : "Off"}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onToggleRun}
+                                    disabled={status === "idle"}
+                                    className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition disabled:opacity-40"
+                                >
+                                    {status === "running" ? "Pause" : "Resume"}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={onFullscreen}
+                                    disabled={status === "idle"}
+                                    className="rounded-xl border border-(--border) px-3 py-2 text-xs font-bold transition hover:bg-(--panel-2) disabled:opacity-40"
+                                >
+                                    Fullscreen
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    <GbaConsole canvasRef={canvasRef} status={status} />
+
+                    {!menuHidden && (
+                        <>
+                            <MobileControls onPress={press} onRelease={release} />
+
+                            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-(--border) bg-(--panel) p-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div className="text-xs leading-relaxed text-(--muted)" role="status">
+                                    {message}
+                                </div>
+                                <div className="shrink-0">
+                                    <input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept=".gba"
+                                        className="hidden"
+                                        onChange={(event) => {
+                                            onUpload(event.target.files?.[0] ?? null);
+                                            event.target.value = "";
+                                        }}
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={coreState !== "ready"}
+                                        className="rounded-xl bg-(--accent) px-4 py-2 text-xs font-bold text-(--accent-text) transition hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                        {coreState === "loading" ? "Loading core" : "Load ROM"}
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
-            </div>
 
-            {/* Library — only rendered when on library tab */}
-            {tab === "library" && <RomLibrary onPlay={loadRomFromLibrary} />}
+                {!menuHidden && tab === "library" && <RomLibrary onPlay={loadRomFromLibrary} />}
+            </main>
 
-            {/* Settings */}
+            <EmulatorQuickMenu
+                open={showQuickMenu}
+                systemLabel="Game Boy Advance"
+                status={status}
+                romName={romName}
+                slot={autoSaveSlot}
+                audioEnabled={audioEnabled}
+                onClose={() => setShowQuickMenu(false)}
+                onToggleRun={() => {
+                    onToggleRun();
+                    setShowQuickMenu(false);
+                }}
+                onSave={() => {
+                    void onSave(autoSaveSlot);
+                    setShowQuickMenu(false);
+                }}
+                onLoad={() => {
+                    void onLoad(autoSaveSlot);
+                    setShowQuickMenu(false);
+                }}
+                onReset={() => {
+                    onReset();
+                    setShowQuickMenu(false);
+                }}
+                onScreenshot={() => {
+                    onScreenshot();
+                    setShowQuickMenu(false);
+                }}
+                onFullscreen={() => {
+                    onFullscreen();
+                    setShowQuickMenu(false);
+                }}
+                onToggleAudio={() => setAudioEnabled((enabled) => !enabled)}
+                onOpenSettings={openSettings}
+                onEject={() => {
+                    setShowQuickMenu(false);
+                    setShowEjectConfirm(true);
+                }}
+            />
+
             <SettingsPanel
                 show={showSettings}
                 open={settingsOpen}
@@ -699,7 +775,6 @@ export default function GbaPlayer() {
                 onResetKeymap={resetKeymap}
             />
 
-            {/* Eject confirm */}
             <ConfirmDialog
                 open={showEjectConfirm}
                 title="Eject ROM"

@@ -66,6 +66,7 @@ function createFakeModule() {
             callOrder.push("FSInit");
         }),
         FSSync: vi.fn(async () => undefined),
+        setCoreSettings: vi.fn(),
         loadGame: vi.fn((path: string) => {
             callOrder.push("loadGame");
             romPath = path;
@@ -85,6 +86,8 @@ function createFakeModule() {
             loadedState = new Uint8Array(file.bytes);
             return true;
         }),
+        quickReload: vi.fn(),
+        resumeGame: vi.fn(),
         pauseGame: vi.fn(),
         pauseAudio: vi.fn(),
         resumeAudio: vi.fn(),
@@ -111,6 +114,10 @@ describe("createMgbaWasmCore save states", () => {
         await core.loadRom(new Uint8Array([1, 2, 3]), "game.gba");
 
         expect(fake.callOrder).toEqual(["FSInit", "loadGame"]);
+        expect(fake.fakeModule.setCoreSettings).toHaveBeenCalledWith({
+            autoSaveStateEnable: false,
+            restoreAutoSaveStateOnLoad: false,
+        });
     });
 
     it("returns bytes from the requested slot instead of another slot", async () => {
@@ -138,5 +145,37 @@ describe("createMgbaWasmCore save states", () => {
         await core.loadStateBytes?.(2, new Uint8Array([9, 8, 7]));
 
         expect(fake.getLoadedState()).toEqual(new Uint8Array([9, 8, 7]));
+    });
+
+    it("reloads and resumes the ROM when resetting from a paused state", async () => {
+        const fake = createFakeModule();
+        loadMgbaFactoryMock.mockResolvedValue(async () => fake.fakeModule);
+
+        const core = await createMgbaWasmCore();
+        core.attachCanvas(document.createElement("canvas"));
+        await core.loadRom(new Uint8Array([1, 2, 3]), "game.gba");
+        core.pause();
+        core.reset();
+
+        expect(fake.fakeModule.quickReload).toHaveBeenCalledOnce();
+        expect(fake.fakeModule.resumeGame).toHaveBeenCalledOnce();
+        expect(core.status).toBe("running");
+    });
+
+    it("keeps the previous status when the mGBA reset API is unavailable", async () => {
+        const fake = createFakeModule();
+        const moduleWithoutReset = {
+            ...fake.fakeModule,
+            quickReload: undefined,
+        };
+        loadMgbaFactoryMock.mockResolvedValue(async () => moduleWithoutReset);
+
+        const core = await createMgbaWasmCore();
+        core.attachCanvas(document.createElement("canvas"));
+        await core.loadRom(new Uint8Array([1, 2, 3]), "game.gba");
+        core.pause();
+
+        expect(() => core.reset()).toThrow("does not expose ROM reset");
+        expect(core.status).toBe("paused");
     });
 });

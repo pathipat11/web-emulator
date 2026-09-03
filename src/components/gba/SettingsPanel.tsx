@@ -7,6 +7,8 @@ import { hasSaveState } from "@/lib/storage/saveStateStore";
 import { TurboRate } from "@/lib/gba/core-adapter";
 import type { GbaButton } from "@/lib/input";
 import type { Keymap } from "@/lib/hooks/useKeymap";
+import { useModalDialog } from "@/lib/hooks/useModalDialog";
+import { useGamepadMenuNavigation } from "@/lib/hooks/useGamepadMenuNavigation";
 
 export function SettingsPanel({
     show,
@@ -58,6 +60,8 @@ export function SettingsPanel({
 }) {
     const importRefs = useRef<Record<number, HTMLInputElement | null>>({});
     const [slotStatus, setSlotStatus] = useState<Record<number, boolean>>({});
+    const dialogRef = useModalDialog<HTMLDivElement>(show, onClose);
+    useGamepadMenuNavigation(show, dialogRef, onClose);
 
     useEffect(() => {
         if (!show || !romHash) return;
@@ -78,6 +82,8 @@ export function SettingsPanel({
     return (
         <>
             <div
+                ref={dialogRef}
+                tabIndex={-1}
                 className={[
                     "fixed inset-0 z-40 bg-black/40 transition-opacity duration-200",
                     open ? "opacity-100" : "opacity-0",
@@ -93,22 +99,28 @@ export function SettingsPanel({
                 ].join(" ")}
                 role="dialog"
                 aria-modal="true"
+                aria-labelledby="gba-settings-title"
             >
                 <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Settings</h2>
-                    <button onClick={onClose} className="text-sm text-(--muted)" type="button" aria-label="Close settings">
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                            Game Boy Advance
+                        </div>
+                        <h2 id="gba-settings-title" className="mt-1 text-lg font-black">Settings</h2>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="grid h-9 w-9 place-items-center rounded-lg border border-(--border) text-sm text-(--muted) transition hover:bg-(--panel-2) hover:text-(--text)"
+                        type="button"
+                        aria-label="Close settings"
+                        data-autofocus
+                    >
                         ✕
                     </button>
                 </div>
 
-                <div className="mt-4 rounded-2xl bg-(--panel-2) p-3 text-sm text-(--text)">
-                    <div className="font-medium">Tips</div>
-                    • Connect a gamepad and press buttons to play (Gamepad API) <br />
-                    • Mobile: touch overlay controls on screen (hold supported)
-                </div>
-
                 {/* Turbo */}
-                <div className="mt-6">
+                <div className="mt-8">
                     <div className="text-base font-semibold">Turbo Mode</div>
                     <div className="mt-3 flex gap-2">
                         {([1, 2, 4] as const).map((t) => (
@@ -118,7 +130,7 @@ export function SettingsPanel({
                                 onClick={() => setTurbo(t)}
                                 className={[
                                     "rounded-xl px-3 py-2 text-sm border border-(--border) transition",
-                                    t === turbo ? "bg-(--accent) text-white" : "bg-(--panel) text-(--text) hover:-translate-y-px",
+                                    t === turbo ? "bg-(--accent) text-(--accent-text)" : "bg-(--panel) text-(--text) hover:-translate-y-px",
                                 ].join(" ")}
                             >
                                 {t}x
@@ -151,7 +163,7 @@ export function SettingsPanel({
                                 disabled={!autoSaveEnabled}
                                 className={[
                                     "rounded-xl px-3 py-2 text-sm border border-(--border) transition disabled:opacity-50",
-                                    s === autoSaveSlot ? "bg-(--accent) text-white" : "bg-(--panel) text-(--text)",
+                                    s === autoSaveSlot ? "bg-(--accent) text-(--accent-text)" : "bg-(--panel) text-(--text)",
                                 ].join(" ")}
                             >
                                 {s}
@@ -173,14 +185,14 @@ export function SettingsPanel({
                                 >
                                     <div className="flex items-center justify-between">
                                         <div className="font-medium">Slot {s}</div>
-                                        <span className={["text-xs", has ? "text-green-500" : "text-(--muted)"].join(" ")}>
+                                        <span className={["text-xs", has ? "text-(--success)" : "text-(--muted)"].join(" ")}>
                                             {has ? "● Has data" : "○ Empty"}
                                         </span>
                                     </div>
                                     <div className="mt-2 grid grid-cols-2 gap-2">
                                         <button
                                             onClick={() => onSave(s)}
-                                            className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 bg-(--accent)"
+                                            className="rounded-xl bg-(--accent) px-3 py-2 text-sm text-(--accent-text) disabled:opacity-50"
                                             disabled={!canInteract}
                                             type="button"
                                         >

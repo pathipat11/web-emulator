@@ -6,6 +6,8 @@ import type { Slot } from "@/lib/storage/nesSaveStateStore";
 import { hasNesSaveState } from "@/lib/storage/nesSaveStateStore";
 import type { NesButton } from "@/lib/nes/input";
 import type { Keymap } from "@/lib/hooks/useKeymap";
+import { useModalDialog } from "@/lib/hooks/useModalDialog";
+import { useGamepadMenuNavigation } from "@/lib/hooks/useGamepadMenuNavigation";
 
 export function NesSettingsPanel({
     show,
@@ -46,6 +48,8 @@ export function NesSettingsPanel({
 }) {
     const importRefs = useRef<Record<number, HTMLInputElement | null>>({});
     const [slotStatus, setSlotStatus] = useState<Record<number, boolean>>({});
+    const dialogRef = useModalDialog<HTMLDivElement>(show, onClose);
+    useGamepadMenuNavigation(show, dialogRef, onClose);
 
     useEffect(() => {
         if (!show || !romHash) return;
@@ -72,6 +76,8 @@ export function NesSettingsPanel({
                 onClick={onClose}
             />
             <div
+                ref={dialogRef}
+                tabIndex={-1}
                 className={[
                     "fixed right-0 top-0 z-50 h-full w-90 max-w-[90vw] bg-(--panel) p-6 shadow-(--shadow-2) overflow-y-auto border-l border-(--border)",
                     "transition-transform duration-200 ease-out will-change-transform",
@@ -79,20 +85,28 @@ export function NesSettingsPanel({
                 ].join(" ")}
                 role="dialog"
                 aria-modal="true"
+                aria-labelledby="nes-settings-title"
             >
                 <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">NES Settings</h2>
-                    <button onClick={onClose} className="text-sm text-(--muted)" type="button" aria-label="Close settings">✕</button>
-                </div>
-
-                <div className="mt-4 rounded-2xl bg-(--panel-2) p-3 text-sm text-(--text)">
-                    <div className="font-medium">Tips</div>
-                    • Connect a gamepad and press buttons to play<br />
-                    • Mobile: touch overlay controls on screen
+                    <div>
+                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-(--accent)">
+                            Nintendo NES
+                        </div>
+                        <h2 id="nes-settings-title" className="mt-1 text-lg font-black">Settings</h2>
+                    </div>
+                    <button
+                        onClick={onClose}
+                        className="grid h-9 w-9 place-items-center rounded-lg border border-(--border) text-sm text-(--muted) transition hover:bg-(--panel-2) hover:text-(--text)"
+                        type="button"
+                        aria-label="Close settings"
+                        data-autofocus
+                    >
+                        ✕
+                    </button>
                 </div>
 
                 {/* Auto Save */}
-                <div className="mt-6">
+                <div className="mt-8">
                     <div className="text-base font-semibold">Auto Save</div>
                     <label className="mt-3 inline-flex items-center gap-2 rounded-xl border border-(--border) bg-(--panel) px-3 py-2">
                         <input type="checkbox" className="h-4 w-4" checked={autoSaveEnabled} onChange={(e) => setAutoSaveEnabled(e.target.checked)} />
@@ -104,7 +118,7 @@ export function NesSettingsPanel({
                             <button key={s} type="button" onClick={() => setAutoSaveSlot(s)} disabled={!autoSaveEnabled}
                                 className={[
                                     "rounded-xl px-3 py-2 text-sm border border-(--border) transition disabled:opacity-50",
-                                    s === autoSaveSlot ? "bg-(--accent) text-white" : "bg-(--panel) text-(--text)",
+                                    s === autoSaveSlot ? "bg-(--accent) text-(--accent-text)" : "bg-(--panel) text-(--text)",
                                 ].join(" ")}
                             >{s}</button>
                         ))}
@@ -121,12 +135,12 @@ export function NesSettingsPanel({
                                 <div key={s} className="rounded-2xl border border-(--border) bg-(--panel) p-3">
                                     <div className="flex items-center justify-between">
                                         <div className="font-medium">Slot {s}</div>
-                                        <span className={["text-xs", has ? "text-green-500" : "text-(--muted)"].join(" ")}>
+                                        <span className={["text-xs", has ? "text-(--success)" : "text-(--muted)"].join(" ")}>
                                             {has ? "● Has data" : "○ Empty"}
                                         </span>
                                     </div>
                                     <div className="mt-2 grid grid-cols-2 gap-2">
-                                        <button onClick={() => onSave(s)} className="rounded-xl px-3 py-2 text-sm text-white disabled:opacity-50 bg-(--accent)" disabled={!canInteract} type="button">Save</button>
+                                        <button onClick={() => onSave(s)} className="rounded-xl bg-(--accent) px-3 py-2 text-sm text-(--accent-text) disabled:opacity-50" disabled={!canInteract} type="button">Save</button>
                                         <button onClick={() => onLoad(s)} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!canInteract} type="button">Load</button>
                                         <button onClick={() => onExportSave(s)} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!has} type="button">↓ Export .sav</button>
                                         <button onClick={() => importRefs.current[s]?.click()} className="rounded-xl border border-(--border) px-3 py-2 text-sm disabled:opacity-50" disabled={!romHash} type="button">↑ Import .sav</button>

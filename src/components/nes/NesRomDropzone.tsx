@@ -56,12 +56,15 @@ export function NesRomDropzone({ onFile }: Props) {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    inputRef.current?.click();
+                }
             }}
             className={[
-                "cursor-pointer rounded-(--radius) border-2 border-dashed p-8 text-center transition",
+                "cursor-pointer rounded-(--radius) border border-dashed p-4 transition sm:p-5",
                 "bg-(--panel) border-(--border) hover:border-(--accent)",
-                dragging ? "border-(--accent) bg-(--panel-2) scale-[1.01]" : "",
+                dragging ? "border-(--accent) bg-(--panel-2)" : "",
             ].join(" ")}
         >
             <input
@@ -69,13 +72,27 @@ export function NesRomDropzone({ onFile }: Props) {
                 type="file"
                 accept=".nes"
                 className="hidden"
-                onChange={(e) => handleFiles(e.target.files)}
+                onChange={(e) => {
+                    handleFiles(e.target.files);
+                    e.target.value = "";
+                }}
             />
-            <div className="text-3xl">🎮</div>
-            <div className="mt-2 text-sm font-medium text-(--text)">
-                {dragging ? "Drop ROM here" : "Drag & drop .nes ROM or click to browse"}
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex min-w-0 items-center gap-3 text-left">
+                    <span className="grid h-10 w-12 shrink-0 place-items-center rounded-lg bg-(--panel-2) font-mono text-[10px] font-black text-(--accent)">
+                        .NES
+                    </span>
+                    <div>
+                        <div className="text-sm font-bold text-(--text)">
+                            {dragging ? "Drop ROM" : "Add ROM"}
+                        </div>
+                        <div className="mt-0.5 text-xs text-(--muted)">.nes files only</div>
+                    </div>
+                </div>
+                <span className="shrink-0 rounded-lg bg-(--accent) px-3 py-2 text-xs font-bold text-(--accent-text)">
+                    Browse
+                </span>
             </div>
-            <div className="mt-1 text-xs text-(--muted)">Only .nes files are accepted</div>
         </div>
     );
 }

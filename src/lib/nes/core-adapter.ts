@@ -197,14 +197,17 @@ export function createJsnesCore(): NesCore {
         },
 
         reset() {
-            if (!nes) return;
+            if (!nes) throw new Error("NES core is not loaded.");
             stopLoop();
-            try {
+
+            if (typeof nes.reloadROM === "function") {
                 nes.reloadROM();
-            } catch {
-                // fallback to basic reset
+            } else if (typeof nes.reset === "function") {
                 nes.reset();
+            } else {
+                throw new Error("This JSNES build does not expose ROM reset.");
             }
+
             core.status = "running";
             if (audioEnabled) audioCtx?.resume();
             audioSamples.length = 0;

@@ -26,12 +26,14 @@ function createCore(): EmulatorCore {
 function KeyboardHarness({
     core,
     keymap,
+    enabled = true,
 }: {
     core: EmulatorCore;
     keymap: Record<string, Button>;
+    enabled?: boolean;
 }) {
     const coreRef = useRef<EmulatorCore | null>(core);
-    useKeyboardInput(coreRef, keymap);
+    useKeyboardInput(coreRef, keymap, enabled);
     return null;
 }
 
@@ -39,13 +41,15 @@ function GamepadHarness({
     core,
     mapping,
     setInfo,
+    enabled = true,
 }: {
     core: EmulatorCore;
     mapping: GamepadMapping<Button>;
     setInfo: (info: string) => void;
+    enabled?: boolean;
 }) {
     const coreRef = useRef<EmulatorCore | null>(core);
-    useGamepadInput(coreRef, mapping, setInfo);
+    useGamepadInput(coreRef, mapping, setInfo, enabled);
     return null;
 }
 
@@ -106,6 +110,25 @@ describe("useKeyboardInput", () => {
         });
         expect(core.release).toHaveBeenCalledTimes(1);
         expect(core.release).toHaveBeenCalledWith("SELECT");
+    });
+
+    it("releases active buttons when keyboard input is disabled", () => {
+        const core = createCore();
+        const root = render(
+            <KeyboardHarness core={core} keymap={{ KeyZ: "A" }} />,
+        );
+
+        act(() => {
+            window.dispatchEvent(new KeyboardEvent("keydown", { code: "KeyZ" }));
+        });
+        expect(core.press).toHaveBeenCalledWith("A");
+
+        act(() => {
+            root.render(
+                <KeyboardHarness core={core} keymap={{ KeyZ: "A" }} enabled={false} />,
+            );
+        });
+        expect(core.release).toHaveBeenCalledWith("A");
     });
 });
 
@@ -202,5 +225,33 @@ describe("useGamepadInput", () => {
         gamepad.buttons[1].value = 0;
         runFrame();
         expect(core.release).toHaveBeenCalledTimes(1);
+    });
+
+    it("releases active buttons when gamepad input is disabled", () => {
+        const core = createCore();
+        const gamepad = createGamepad();
+        gamepad.buttons[0].pressed = true;
+        gamepad.buttons[0].value = 1;
+        const runFrame = installGamepadRuntime(gamepad);
+        const setInfo = vi.fn();
+        const mapping: GamepadMapping<Button> = { buttons: { 0: "A" } };
+
+        const root = render(
+            <GamepadHarness core={core} mapping={mapping} setInfo={setInfo} />,
+        );
+        runFrame();
+        expect(core.press).toHaveBeenCalledWith("A");
+
+        act(() => {
+            root.render(
+                <GamepadHarness
+                    core={core}
+                    mapping={mapping}
+                    setInfo={setInfo}
+                    enabled={false}
+                />,
+            );
+        });
+        expect(core.release).toHaveBeenCalledWith("A");
     });
 });

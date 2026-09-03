@@ -12,8 +12,11 @@ const DPAD = new Set(["UP", "DOWN", "LEFT", "RIGHT"]);
 export function useKeyboardInput<B extends string>(
     coreRef: React.RefObject<EmulatorCore | null>,
     keymap: Record<string, B>,
+    enabled = true,
 ) {
     useEffect(() => {
+        if (!enabled) return;
+
         const activeKeys = new Map<string, B>();
 
         const hasActiveButton = (button: B) =>
@@ -70,5 +73,5 @@ export function useKeyboardInput<B extends string>(
             document.removeEventListener("visibilitychange", onVisibilityChange);
             releaseAll();
         };
-    }, [coreRef, keymap]);
+    }, [coreRef, enabled, keymap]);
 }

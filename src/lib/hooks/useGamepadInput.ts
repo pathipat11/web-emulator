@@ -12,10 +12,13 @@ export function useGamepadInput<B extends string>(
     coreRef: React.RefObject<EmulatorCore | null>,
     mapping: GamepadMapping<B>,
     setGamepadInfo: (s: string) => void,
+    enabled = true,
 ) {
     const activeIndexRef = useRef<number | null>(null);
 
     useEffect(() => {
+        if (!enabled) return;
+
         const activeInputs = new Map<string, B>();
         let raf = 0;
         let lastInfo = "";
@@ -135,5 +138,5 @@ export function useGamepadInput<B extends string>(
             document.removeEventListener("visibilitychange", onVisibilityChange);
             releaseAll();
         };
-    }, [coreRef, mapping, setGamepadInfo]);
+    }, [coreRef, enabled, mapping, setGamepadInfo]);
 }

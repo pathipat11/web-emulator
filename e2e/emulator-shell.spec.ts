@@ -330,6 +330,72 @@ test("a phone can pair with the GBA player through WebRTC", async ({
     ).toBe(centeredTransform);
     await phonePage.mouse.up();
 
+    const controllerRegion = phonePage.getByRole("region", {
+        name: "Virtual controller",
+    });
+    const controllerBounds = await controllerRegion.boundingBox();
+    expect(controllerBounds).not.toBeNull();
+
+    await phonePage
+        .getByRole("button", { name: "Customize controller layout" })
+        .click();
+    await expect(phonePage.getByText("Editing gba landscape")).toBeVisible();
+
+    const moveA = phonePage.getByRole("group", {
+        name: "Move A control",
+    });
+    const moveABounds = await moveA.boundingBox();
+    expect(moveABounds).not.toBeNull();
+    await phonePage.mouse.move(
+        moveABounds!.x + moveABounds!.width / 2,
+        moveABounds!.y + moveABounds!.height / 2,
+    );
+    await phonePage.mouse.down();
+    await phonePage.mouse.move(
+        controllerBounds!.x + controllerBounds!.width + 100,
+        controllerBounds!.y + controllerBounds!.height + 100,
+    );
+    await phonePage.mouse.up();
+
+    const movedABounds = await moveA.boundingBox();
+    expect(movedABounds).not.toBeNull();
+    expect(movedABounds!.x).toBeGreaterThanOrEqual(controllerBounds!.x);
+    expect(movedABounds!.y).toBeGreaterThanOrEqual(controllerBounds!.y);
+    expect(movedABounds!.x + movedABounds!.width).toBeLessThanOrEqual(
+        controllerBounds!.x + controllerBounds!.width + 1,
+    );
+    expect(movedABounds!.y + movedABounds!.height).toBeLessThanOrEqual(
+        controllerBounds!.y + controllerBounds!.height + 1,
+    );
+
+    await phonePage.getByRole("slider", { name: "Control size" }).fill("120");
+    await phonePage
+        .getByRole("slider", { name: "Control opacity" })
+        .fill("75");
+    const savedLayout = await phonePage.evaluate(() => {
+        const raw = localStorage.getItem(
+            "phone-controller:layout:v1:gba:landscape",
+        );
+        return raw ? JSON.parse(raw) as {
+            scale: number;
+            opacity: number;
+            positions: { A: { x: number; y: number } };
+        } : null;
+    });
+    expect(savedLayout).not.toBeNull();
+    expect(savedLayout!.scale).toBe(1.2);
+    expect(savedLayout!.opacity).toBe(0.75);
+    expect(savedLayout!.positions.A.x).toBeLessThan(100);
+    expect(savedLayout!.positions.A.y).toBeLessThan(100);
+
+    await phonePage.getByRole("button", { name: "Lock layout" }).click();
+    await expect(
+        phonePage.getByRole("button", { name: "Customize controller layout" }),
+    ).toBeVisible();
+    await expect(
+        phonePage.getByRole("button", { name: "A", exact: true }),
+    ).toBeEnabled();
+
     await phonePage.getByRole("button", { name: "Connected" }).click();
     const connectionDialog = phonePage.getByRole("dialog", {
         name: "Phone connection",
@@ -343,10 +409,6 @@ test("a phone can pair with the GBA player through WebRTC", async ({
         .click();
     await expect(connectionDialog).toBeHidden();
 
-    const controllerBounds = await phonePage
-        .getByRole("region", { name: "Virtual controller" })
-        .boundingBox();
-    expect(controllerBounds).not.toBeNull();
     expect(controllerBounds!.x).toBeGreaterThanOrEqual(0);
     expect(controllerBounds!.y).toBeGreaterThanOrEqual(0);
     expect(controllerBounds!.x + controllerBounds!.width).toBeLessThanOrEqual(844);

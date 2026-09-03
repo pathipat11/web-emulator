@@ -31,6 +31,7 @@ browser and are never uploaded to an application server.
 - Shared Quick Menu for GBA and NES with keyboard and gamepad navigation
 - Shared mobile virtual joystick with diagonal movement and stuck-input recovery
 - Phone Controller pairing for GBA and NES through WebRTC and a connection modal
+- Freely draggable Phone Controller layouts with size and opacity controls
 - Accessible modal focus handling and `Escape` dismissal
 - App-level and system-specific error recovery screens
 
@@ -136,6 +137,18 @@ because those are the face buttons supported by their cores. The control layout
 is capability-based so X/Y can be added when a supported system such as SNES is
 implemented.
 
+After connecting, select **Layout** to customize the controller:
+
+- Drag the joystick and each button independently.
+- Use the arrow keys to nudge a selected control; hold `Shift` for larger steps.
+- Adjust the global control size and opacity.
+- Reset the active layout or select **Lock layout** when finished.
+- Positions are clamped to the visible controller safe area.
+
+Layouts use percentage-based coordinates and are stored separately for each
+system and screen orientation. Landscape and portrait layouts therefore remain
+independent and continue to fit different screen sizes.
+
 The phone sends a heartbeat while connected. Both sides release held inputs when
 the page is hidden, loses focus, or the peer connection is interrupted. A
 temporary WebRTC interruption can recover without reloading the controller. If
@@ -184,7 +197,8 @@ save states.
 ### Storage
 
 ROM bytes and GBA/NES save states live in IndexedDB. localStorage is used only
-for small synchronous data such as ROM metadata lists, keymaps, and theme.
+for small synchronous data such as ROM metadata lists, keymaps, theme, and Phone
+Controller layouts.
 
 | System | ROM database | Save-state database |
 | --- | --- | --- |
@@ -235,9 +249,10 @@ The DS player additionally needs access to `cdn.emulatorjs.org`.
 The Playwright suite covers GBA, NES, and DS on desktop and mobile Chromium. It
 checks primary navigation, Focus mode, Quick Menu behavior, hydration/script
 warnings, DS retry behavior after a simulated CDN failure, WebRTC Phone
-Controller pairing, connection modal behavior, and virtual joystick recovery.
-Vitest also covers the shared error recovery screen and joystick direction
-handling.
+Controller pairing, connection modal behavior, draggable layout safe areas,
+layout persistence, and virtual joystick recovery. Vitest also covers the shared
+error recovery screen, joystick direction handling, and layout preference
+validation.
 
 GitHub Actions runs lint, unit tests, installs Chromium, builds the application,
 and runs the E2E suite on every push and pull request.

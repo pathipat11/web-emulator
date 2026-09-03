@@ -1,44 +1,51 @@
 import SystemCard from "@/components/SystemCard";
-import ThemeToggle from "@/components/ThemeToggle";
+import { AppShell } from "@/components/shell/AppShell";
 
 export default function Home() {
-  const systems = [
-    { title: "GBA", desc: "Game Boy Advance — Play .gba ROMs in browser", href: "/gba", disabled: false, image: "/images/gba.jpeg" },
-    { title: "NES", desc: "Nintendo Entertainment System — Play .nes ROMs in browser", href: "/nes", disabled: false, image: "/images/nes.jpeg" },
-    { title: "NDS", desc: "Nintendo DS — Play .nds ROMs in browser", href: "/ds", disabled: false, image: "/images/ds.jpeg" },
-    { title: "SNES", desc: "Super Nintendo Entertainment System", href: "#", disabled: true, image: "/images/SNES.jpeg" },
-    { title: "GB", desc: "Game Boy", href: "#", disabled: true, image: "/images/gb.jpeg" },
-    { title: "PS1", desc: "PlayStation 1 (may require BIOS)", href: "#", disabled: true, image: "/images/Ps1.jpeg" },
-  ];
+    const systems = [
+        { title: "Game Boy Advance", desc: "Portable 32-bit classics powered by mGBA WASM.", core: "mGBA", extension: ".gba", href: "/gba", disabled: false, image: "/images/gba.jpeg" },
+        { title: "Nintendo NES", desc: "8-bit console games running through the JSNES core.", core: "JSNES", extension: ".nes", href: "/nes", disabled: false, image: "/images/nes.jpeg" },
+        { title: "Nintendo DS", desc: "Dual-screen emulation powered by DeSmuME and EmulatorJS.", core: "DeSmuME", extension: ".nds", href: "/ds", disabled: false, image: "/images/ds.jpeg" },
+        { title: "Super Nintendo", desc: "The 16-bit console library is planned for a future release.", core: "Planned", extension: ".sfc", href: "#", disabled: true, image: "/images/SNES.jpeg" },
+        { title: "Game Boy", desc: "Original handheld system support is coming soon.", core: "Planned", extension: ".gb", href: "#", disabled: true, image: "/images/gb.jpeg" },
+        { title: "PlayStation", desc: "Disc and BIOS-based emulation is under evaluation.", core: "Planned", extension: ".cue", href: "#", disabled: true, image: "/images/Ps1.jpeg" },
+    ];
 
-  return (
-    <main className="min-h-screen">
-      <div className="mx-auto max-w-5xl px-4 py-12">
-        {/* Header */}
-        <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-black tracking-tight sm:text-4xl">
-              Web Emulator Lab
-            </h1>
-            <p className="mt-2 max-w-md text-sm leading-relaxed text-(--muted)">
-              Choose a system to emulate, then upload your own ROM to play in the browser.
-            </p>
-          </div>
-          <ThemeToggle />
-        </div>
+    return (
+        <AppShell
+            eyebrow="Main menu"
+            title="Browse systems"
+            status={(
+                <span className="hidden items-center gap-2 rounded-full border border-(--success-border) bg-(--success-soft) px-3 py-1.5 text-xs font-bold text-(--success) sm:inline-flex">
+                    <span className="h-1.5 w-1.5 rounded-full bg-current" />
+                    3 systems ready
+                </span>
+            )}
+        >
+            <section aria-labelledby="systems-heading">
+                <div className="mb-4 flex items-end justify-between gap-4">
+                    <div>
+                        <h2 id="systems-heading" className="text-xl font-black tracking-tight">
+                            Select a system
+                        </h2>
+                    </div>
+                    <span className="text-xs font-semibold text-(--muted)">3 of 6 available</span>
+                </div>
 
-        {/* System grid */}
-        <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {systems.map((s) => (
-            <SystemCard key={s.title} {...s} />
-          ))}
-        </div>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    {systems.map((system) => (
+                        <SystemCard key={system.title} {...system} />
+                    ))}
+                </div>
+            </section>
 
-        {/* Footer */}
-        <div className="mt-16 text-center text-xs text-(--muted)">
-          All ROMs are loaded client-side. Nothing is uploaded to any server.
-        </div>
-      </div>
-    </main>
-  );
+            <div className="mt-8 hidden items-center justify-between border-t border-(--border) pt-4 text-[11px] font-semibold text-(--muted) lg:flex">
+                <span>Web Emulator Lab</span>
+                <div className="flex items-center gap-4">
+                    <span><kbd className="command-key">↵</kbd> Select</span>
+                    <span><kbd className="command-key">Esc</kbd> Back</span>
+                </div>
+            </div>
+        </AppShell>
+    );
 }

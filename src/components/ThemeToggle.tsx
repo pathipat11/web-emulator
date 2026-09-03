@@ -32,19 +32,28 @@ export default function ThemeToggle() {
 
     if (!mounted) {
         return (
-            <span className="inline-flex h-7.5 w-23 rounded-full border border-(--border) bg-(--panel)" />
+            <span className="inline-flex h-10 w-10 rounded-xl border border-(--border) bg-(--panel)" />
         );
     }
 
     return (
         <button
             onClick={toggle}
-            className="rounded-full border px-3 py-1 bg-(--panel) border-(--border) text-(--text) hover:-translate-y-px transition"
+            className="grid h-10 w-10 place-items-center rounded-xl border border-(--border) bg-(--panel) text-(--text) transition hover:border-(--accent-border) hover:bg-(--panel-2)"
             title="Toggle theme"
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
             type="button"
         >
-            {theme === "dark" ? "🌙 Dark" : "☀️ Light"}
+            {theme === "dark" ? (
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none">
+                    <path d="M20 15.1A8.5 8.5 0 0 1 8.9 4 8.5 8.5 0 1 0 20 15.1Z" stroke="currentColor" strokeWidth="1.8" />
+                </svg>
+            ) : (
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none">
+                    <circle cx="12" cy="12" r="3.5" stroke="currentColor" strokeWidth="1.8" />
+                    <path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                </svg>
+            )}
         </button>
     );
 }
